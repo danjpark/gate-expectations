@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gate Expectations</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #1b1f2a; color: #eef; font: 15px system-ui, sans-serif; }
+  main { max-width: 1000px; margin: 0 auto; padding: 16px; }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  #bar { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+  button { background: #2f6fb3; color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; font: inherit; cursor: pointer; }
+  button:disabled { background: #3a4050; color: #8a90a0; cursor: default; }
+  #status { min-height: 1.4em; margin: 4px 0; }
+  canvas { width: 100%; height: auto; background: #252b3a; border-radius: 8px; touch-action: none; display: block; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Gate Expectations</h1>
+  <div id="hint"></div>
+  <div id="bar">
+    <button id="go">Go</button>
+    <button id="release">Release next zone</button>
+    <button id="retry">Retry (same passengers)</button>
+    <button id="new">New flight</button>
+  </div>
+  <div id="status"></div>
+  <canvas id="c" width="960" height="460"></canvas>
+</main>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

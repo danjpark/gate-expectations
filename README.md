@@ -4,7 +4,8 @@ A comedic airport game: you're a gate agent who thinks "I could organize this be
 Paint boarding zones onto the seat map, press go, watch the passengers move, and
 improve the plan on the next attempt. Earn your way from gate agent to running the airport.
 
-Built in **Godot 4 (GDScript 2.0, statically typed)**, Compatibility renderer, web export first.
+**Current target: a web prototype** (plain HTML + canvas + ES modules, no build step).
+The simulation is kept separate from the drawing so it can be ported to Godot 4 later.
 
 ## Status
 
@@ -14,19 +15,20 @@ a design-doc change first.
 
 ## Run
 
-Needs Godot 4.3+ on your PATH (or use the editor: open `project.godot`, press F5).
+Needs Node 20+ (no dependencies to install).
 
 ```bash
-godot --headless --import            # first time only
-godot --headless -s tests/run_tests.gd   # simulation tests, exit code 1 on failure
+npm start    # serves http://localhost:5173
+npm test     # headless simulation tests
 ```
 
 ## Layout
 
-- `sim/` pure `RefCounted` GDScript: layout, plan, manifest, passenger, boarding sim. No nodes, no physics, no frame time, no global RNG.
-- `scenes/` visual layer; reads sim state and draws it.
-- `tests/` headless tests.
+- `src/sim/` pure JS: layout, plan, manifest, passenger, boarding sim, seeded RNG. No DOM, no clock, no `Math.random`.
+- `src/main.js` canvas UI; reads sim state and draws it.
+- `tests/` Node test runner tests for the sim.
+- `tools/serve.js` tiny static dev server.
 
-## Rules for the simulation
+## Simulation rules
 
-Fixed ticks, integer cells, one seeded `RandomNumberGenerator` per flight. Same plane + manifest + zones = same boarding time.
+Fixed ticks, integer cells, one seeded RNG per flight. Same plane + manifest + zones = same boarding time.
