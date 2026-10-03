@@ -11,7 +11,8 @@ export class Passenger {
     this.zone = 0;
     this.state = State.AT_GATE;
     this.cell = -1;           // aisle cell while IN_AISLE
-    this.seatingLeft = 0;     // ticks left blocking the aisle while sitting down
+    this.targetCell = 0;      // aisle cell next to the assigned row
+    this.seatingLeft = 0;    // ticks left blocking the aisle while sitting down
     // Experience (ticks)
     this.gateWait = 0;
     this.blocked = 0;
