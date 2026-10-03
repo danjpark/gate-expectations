@@ -11,10 +11,11 @@
   h1 { margin: 0 0 4px; font-size: 22px; }
   a { color: #8ec1ff; }
   .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 12px 0; }
-  button, input { font: inherit; }
+  button, input, select { font: inherit; }
   button { background: #2f6fb3; color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; cursor: pointer; }
   button:disabled { background: #3a4050; color: #8a90a0; }
-  input { width: 5.5em; padding: 6px; background: #252b3a; color: #eef; border: 1px solid #3a4258; border-radius: 6px; }
+  input, select { padding: 6px; background: #252b3a; color: #eef; border: 1px solid #3a4258; border-radius: 6px; }
+  input { width: 5.5em; }
   canvas { width: 100%; height: auto; background: #252b3a; border-radius: 8px; display: block; }
   table { border-collapse: collapse; width: 100%; margin-top: 12px; }
   th, td { text-align: right; padding: 6px 10px; border-bottom: 1px solid #333b50; }
@@ -28,9 +29,10 @@
   <h1>Boarding time distributions</h1>
   <div><a href="index.html">&larr; back to the game</a> &middot; dev tool, not part of the game</div>
   <div class="row">
-    <label>Flights per plan <input id="n" type="number" value="2000" min="100" max="20000" step="100"></label>
-    <label>Target (ticks) <input id="target" type="number" value="45"></label>
-    <button id="opt">Search for a better plan</button>
+    <label>Simulation flights <input id="n" type="number" value="2000" min="100" max="20000" step="100"></label>
+    <label>Zones <select id="zones"><option>2</option><option>3</option></select></label>
+    <button id="bands">Best row bands</button>
+    <button id="opt">Local search</button>
   </div>
   <div id="note"></div>
   <canvas id="c" width="1000" height="360"></canvas>

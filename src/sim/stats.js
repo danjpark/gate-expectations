@@ -69,6 +69,47 @@ export function optimizePlan({ layout, trainSeeds, maxZones = 2, gaps = [1, 12],
   return champion;
 }
 
+// Every way to cut the plane into `zones` contiguous bands of rows and choose the boarding order of the
+// bands. Exhaustive: C(rows-1, zones-1) * zones! plans (330 for 3 zones on 12 rows). Returns the best
+// `top` by mean ticks on `trainSeeds`, with a readable label.
+export function searchRowBands({ layout, zones, trainSeeds, top = 3, gap = 1 }) {
+  const R = layout.rows;
+  const cutSets = [];
+  const pick = (start, chosen) => {
+    if (chosen.length === zones - 1) { cutSets.push(chosen.slice()); return; }
+    for (let c = start; c < R; c++) { chosen.push(c); pick(c + 1, chosen); chosen.pop(); }
+  };
+  pick(1, []);
+  const orders = [];
+  const permute = (arr, rest) => {
+    if (!rest.length) { orders.push(arr); return; }
+    rest.forEach((v, i) => permute([...arr, v], rest.filter((_, j) => j !== i)));
+  };
+  permute([], Array.from({ length: zones }, (_, i) => i));
+
+  const results = [];
+  for (const cuts of cutSets) {
+    const edges = [0, ...cuts, R];
+    for (const order of orders) { // order[b] = boarding rank of band b (0 boards first)
+      const zoneOfSeat = Array.from({ length: layout.seatCount }, (_, s) => {
+        const r = layout.seatRow(s);
+        return order[edges.findIndex((e, i) => r >= e && r < edges[i + 1])];
+      });
+      const mean = runBatch(layout, zoneOfSeat, gap, trainSeeds, zones).reduce((a, b) => a + b, 0) / trainSeeds.length;
+      const bands = order.map((rank, b) => ({ rank, b })).sort((x, y) => x.rank - y.rank)
+        .map(({ b }) => `rows ${edges[b] + 1}-${edges[b + 1]}`);
+      results.push({ zoneOfSeat, gap, trainMean: mean, label: bands.join(" then ") });
+    }
+  }
+  return results.sort((a, b) => a.trainMean - b.trainMean).slice(0, top);
+}
+
+// Equal-sized row bands, rear first (what "split the plane into thirds" means).
+export function evenBands(layout, zones) {
+  return Array.from({ length: layout.seatCount }, (_, s) =>
+    zones - 1 - Math.min(zones - 1, Math.floor((layout.seatRow(s) * zones) / layout.rows)));
+}
+
 // Best release gap for a fixed plan.
 export function bestGap(layout, zoneOfSeat, seeds, maxGap = 12, maxZones = 2) {
   let best = null;

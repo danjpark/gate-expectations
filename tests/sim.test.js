@@ -4,7 +4,7 @@ import { PlaneLayout } from "../src/sim/layout.js";
 import { BoardingPlan, MAX_ZONES_TIER1 } from "../src/sim/plan.js";
 import { BoardingSim } from "../src/sim/boarding.js";
 import { generateManifest } from "../src/sim/manifest.js";
-import { runBatch, summarize, optimizePlan, seedRange, DNF_TICKS } from "../src/sim/stats.js";
+import { runBatch, summarize, optimizePlan, searchRowBands, evenBands, seedRange, DNF_TICKS } from "../src/sim/stats.js";
 
 function flight(kind, seed, gap) {
   const layout = new PlaneLayout();
@@ -59,6 +59,14 @@ test("optimizer beats the best simple plan on held-out seeds", () => {
   const held = seedRange(5001, 300);
   const mean = (z, g) => summarize(runBatch(l, z, g, held)).mean;
   assert.ok(mean(best.zoneOfSeat, best.gap) <= mean(back, 6) + 0.1);
+});
+
+test("row-band search is exhaustive and includes the even split", () => {
+  const l = new PlaneLayout();
+  const all = searchRowBands({ layout: l, zones: 3, trainSeeds: seedRange(1, 5), top: 1000 });
+  assert.equal(all.length, 330); // C(11,2) cuts * 3! orders
+  assert.deepEqual(evenBands(l, 3).filter((z) => z === 0).length, 8); // rear third = 4 rows * 2 seats
+  assert.ok(all.some((r) => r.zoneOfSeat.join() === evenBands(l, 3).join()));
 });
 
 test("Tier 1 caps zones at 2", () => {
