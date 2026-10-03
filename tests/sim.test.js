@@ -51,17 +51,81 @@ test("Tier 1 caps zones at 2", () => {
   assert.equal(plan.zoneOfSeat[0], MAX_ZONES_TIER1 - 1);
 });
 
-test("layout depth: window is 0, aisle seat is seatsPerSide - 1, on both sides", () => {
-  const l = new PlaneLayout(10, 3);
-  assert.deepEqual([0, 1, 2, 3, 4, 5].map((c) => l.seatDepth(l.seatIndex(0, c))), [0, 1, 2, 2, 1, 0]);
-  assert.equal(l.seatAt(4, 1, 0), l.seatIndex(4, 5));
+test("layout: aisle distance and aisle choice for 3-3 and 3-4-3", () => {
+  const n = new PlaneLayout(10, [3, 3]);
+  assert.deepEqual([0, 1, 2, 3, 4, 5].map((c) => n.seatAisleDistance(c)), [2, 1, 0, 0, 1, 2]);
+  assert.deepEqual(n.seatsBetweenAisle(n.seatIndex(4, 0)), [n.seatIndex(4, 1), n.seatIndex(4, 2)]);
+  const w = new PlaneLayout(10, [3, 4, 3]);
+  assert.equal(w.aisleCount, 2);
+  assert.deepEqual([...Array(10).keys()].map((c) => w.seatAisle(c)), [0, 0, 0, 0, 0, 1, 1, 1, 1, 1]);
+  assert.deepEqual([...Array(10).keys()].map((c) => w.seatAisleDistance(c)), [2, 1, 0, 0, 1, 1, 0, 0, 1, 2]);
 });
 
-test("seat interference: window-first beats aisle-first on a 2+2 plane", () => {
-  const l = new PlaneLayout(12, 2);
-  const byDepth = (first) => Array.from({ length: l.seatCount }, (_, s) => (l.seatDepth(s) === first ? 0 : 1));
+// Seat 0 of row 0 is the left window of a 3-3 plane; seats 1 and 2 are between it and the aisle.
+function shuffleScenario() {
+  const l = new PlaneLayout(4, [3, 3]);
+  const plan = new BoardingPlan(l, 5);
+  const sim = new BoardingSim(l, plan, 1);
+  for (const s of [1, 2]) sim.seat(sim.bySeat[s]);
+  const window = sim.bySeat[0];
+  window.state = 1; window.lane = 0; window.cell = window.targetCell; // standing at row 0
+  sim.lanes[0][window.targetCell] = window.id;
+  sim.arrive(window);
+  return { sim, window, c: window.targetCell };
+}
+
+test("seat shuffle: neighbours stand in the aisle past the row, then step back and reseat", () => {
+  const { sim, window, c } = shuffleScenario();
+  assert.equal(window.neighbours.length, 2);
+  sim.step();
+  assert.equal(sim.lanes[0][c + 1], -2, "neighbours hold the cell past the row");
+  assert.equal(sim.bySeat[1].state, 3, "middle passenger is standing");
+  let ticks = 0;
+  while (window.state !== 2 && ticks++ < 50) sim.step();
+  assert.equal(sim.lanes[0][c], -2, "neighbours now hold the row's own cell while reseating");
+  while (sim.bySeat[1].state !== 2 && ticks++ < 50) sim.step();
+  assert.equal(sim.lanes[0][c], -1);
+  assert.ok(sim.seatTaken[0] && sim.seatTaken[1] && sim.seatTaken[2]);
+});
+
+test("seat interference: window-first beats aisle-first on a 3-3 plane", () => {
+  const l = new PlaneLayout(12, [3, 3]);
+  const by = (first) => Array.from({ length: l.seatCount }, (_, s) => (l.seatAisleDistance(s) === first ? 0 : 1));
   const seeds = seedRange(1, 20);
-  assert.ok(meanTicks(l, byDepth(0), seeds) < meanTicks(l, byDepth(1), seeds));
+  assert.ok(meanTicks(l, by(2), seeds) < meanTicks(l, by(0), seeds));
+});
+
+test("zones can be called in any order; auto-call follows a chosen order", () => {
+  const l = new PlaneLayout();
+  const plan = new BoardingPlan(l, 3);
+  for (let s = 0; s < l.seatCount; s++) plan.paint(s, l.seatRow(s) % 3);
+  const sim = new BoardingSim(l, plan, 3);
+  sim.releaseZone(2);
+  assert.deepEqual(sim.released, [false, false, true]);
+  assert.ok(sim.gateQueue.every((p) => p.zone === 2));
+  sim.releaseZone(2); // calling twice does nothing
+  assert.equal(sim.gateQueue.length, 8);
+  const auto = new BoardingSim(l, plan, 3);
+  const order = [1, 2, 0];
+  const calls = [];
+  while (!auto.done) {
+    const before = auto.released.slice();
+    auto.autoCall(order);
+    auto.released.forEach((r, z) => { if (r && !before[z]) calls.push(z); });
+    auto.step();
+  }
+  assert.deepEqual(calls, order);
+});
+
+test("wide-body boards on two aisles and finishes", () => {
+  const l = new PlaneLayout(32, [3, 4, 3]);
+  const plan = new BoardingPlan(l, 5);
+  const sim = new BoardingSim(l, plan, 1);
+  sim.releaseZone(0);
+  let usedRight = false;
+  while (!sim.done && sim.tick < 5000) { sim.step(); usedRight ||= sim.lanes[1].some((v) => v >= 0); }
+  assert.ok(sim.done && usedRight);
+  assert.equal(sim.seatedCount, 320);
 });
 
 test("runBatch is repeatable and a never-finishing gap counts as DNF", () => {
@@ -73,7 +137,7 @@ test("runBatch is repeatable and a never-finishing gap counts as DNF", () => {
 });
 
 test("patterns scale to 204 seats and 5 zones with balanced even zones", () => {
-  const l = new PlaneLayout(34, 3);
+  const l = new PlaneLayout(34, [3, 3]);
   for (const angle of [0, 45, 90]) {
     const sizes = [0, 0, 0, 0, 0];
     for (const z of evenPattern(l, angle, 5)) sizes[z]++;

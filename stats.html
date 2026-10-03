@@ -32,14 +32,9 @@
   <h1>Boarding time distributions</h1>
   <div><a href="index.html">&larr; back to the game</a> &middot; dev tool, not part of the game</div>
   <div class="row">
-    <label>Plane <select id="preset">
-      <option value="12,1">Tier 1 · 24 seats</option>
-      <option value="12,2">Tier 2 · 48 seats</option>
-      <option value="34,3">Narrow-body · 204 seats</option>
-      <option value="custom">Custom</option>
-    </select></label>
+    <label>Plane <select id="preset"></select></label>
     <label>Rows <input id="rows" type="number" min="2" max="80" value="12"></label>
-    <label>Seats per side <input id="perSide" type="number" min="1" max="5" value="1"></label>
+    <label title="Seats per block, left to right; an aisle between each block">Seat blocks <input id="blocks" value="1-1" style="width:5.5em"></label>
     <label>Zones <select id="zones"><option>2</option><option>3</option><option>4</option><option>5</option></select></label>
     <label>Simulation flights <input id="n" type="number" value="2000" min="100" max="20000" step="100"></label>
   </div>

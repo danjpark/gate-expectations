@@ -9,9 +9,15 @@ The simulation is kept separate from the drawing so it can be ported to Godot 4 
 
 ## Status
 
-Prototype scope = Tier 1 only: 24 seats (12 rows, 1 seat per side), manual zone release,
-2-zone cap, hover name cards, one trait (patience) feeding mood. Anything beyond that needs
-a design-doc change first.
+Planes (`PLANES` in `src/sim/layout.js`): Tier 1 (24 seats, 2 zones), Tier 2 (48), single-aisle
+737-style (32 rows, 3-3, 192 seats), wide-body (32 rows, 3-4-3 or 3-3-3, two aisles, one door).
+
+- Paint up to the plane's zone limit; call zones by hand in any order (the first call starts the flight).
+- First upgrade: auto-call zones (cheap). Calls the next zone in your chosen order once the lounge line clears.
+  Placeholder economy: $10 per finished flight, +$10 on time, upgrade costs $30. Saved in the browser.
+- Seat shuffle: seated neighbours between you and your seat step into the aisle (blocking two cells),
+  you sit, then they step back and sit down again.
+- Hover name cards; one trait (patience) feeding mood.
 
 ## Run
 
@@ -25,11 +31,11 @@ npm test     # headless simulation tests
 ## Stats tool (dev only)
 
 `stats.html` runs many seeded simulation flights per zone plan and overlays the boarding-time
-distributions, with a seat map of each plan. Works for any single-aisle plane (rows x seats per side)
-and up to 5 zones. Zone patterns rank seats by a blend of row (back to front) and seat depth
-(window to aisle), then cut the ranking into zones (`src/sim/patterns.js`). The search tunes the
-cuts for several blend angles; an optional pass then refines single seats. CLI version:
-`node tools/analyze.js 34 3 5` (rows, seats per side, zones).
+distributions, with a seat map of each plan. Works for any plane given as rows x seat blocks
+(e.g. `3-4-3`) and up to 5 zones. Zone patterns rank seats by a blend of row (back to front) and
+distance from the aisle (window first), then cut the ranking into zones (`src/sim/patterns.js`).
+The search tunes the cuts for several blend angles; an optional pass then refines single seats.
+CLI version: `node tools/analyze.js 32 3-4-3 5` (rows, seat blocks, zones).
 
 ## Layout
 

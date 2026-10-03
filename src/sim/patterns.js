@@ -1,7 +1,7 @@
 // Zone patterns that scale to any single-aisle plane and any zone count.
 //
 // Every pattern is "rank the seats, then cut the ranking into zones":
-//   score(seat) = cos(angle) * rowFromBack + sin(angle) * depthFromWindow   (both 0..1, lower boards first)
+//   score(seat) = cos(angle) * rowFromBack + sin(angle) * nearnessToAisle   (both 0..1, lower boards first)
 //   angle 0   -> rows, back to front
 //   angle 90  -> window, then middle, then aisle seats
 //   in between -> a diagonal sweep: rear windows first, then front windows with rear middles, and so on
@@ -21,11 +21,11 @@ export function patternName(angle) {
 // Seat groups in boarding-priority order for one angle.
 export function seatGroups(layout, angle) {
   const rad = (angle * Math.PI) / 180;
-  const rowSpan = Math.max(1, layout.rows - 1), depthSpan = Math.max(1, layout.seatsPerSide - 1);
+  const rowSpan = Math.max(1, layout.rows - 1), distSpan = Math.max(1, layout.maxDistance);
   const byScore = new Map();
   for (let s = 0; s < layout.seatCount; s++) {
     const fromBack = (layout.rows - 1 - layout.seatRow(s)) / rowSpan;
-    const fromWindow = layout.seatDepth(s) / depthSpan;
+    const fromWindow = 1 - layout.seatAisleDistance(s) / distSpan; // seats farthest from their aisle board first
     const key = Math.round((Math.cos(rad) * fromBack + Math.sin(rad) * fromWindow) * 1e6);
     if (!byScore.has(key)) byScore.set(key, []);
     byScore.get(key).push(s);
@@ -103,10 +103,10 @@ export function tuneCuts({ layout, angle, zones, trainSeeds }) {
     label: `${patternName(angle)} · zone sizes ${zoneSizes(zoneOfSeat).join("/")}` };
 }
 
-// Best pattern per angle, sorted best first. Single-seat-per-side planes have no window/aisle choice,
-// so only the row angle is searched there.
+// Best pattern per angle, sorted best first. Planes where every seat is an aisle seat have no
+// window/aisle choice, so only the row angle is searched there.
 export function searchPatterns({ layout, zones, trainSeeds, angles = SEARCH_ANGLES, onProgress = () => {} }) {
-  const use = layout.seatsPerSide === 1 ? [0] : angles;
+  const use = layout.maxDistance === 0 ? [0] : angles;
   const byPlan = new Map(); // different angles can land on the same plan; keep one, note the angles
   use.forEach((angle, i) => {
     onProgress(`${patternName(angle)} (${i + 1}/${use.length})`);

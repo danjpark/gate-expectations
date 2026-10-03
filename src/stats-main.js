@@ -1,13 +1,13 @@
 // Stats page: overlay boarding-time distributions for several zone plans, with a map of each plan.
 // All simulation runs happen in stats-worker.js.
-import { PlaneLayout } from "./sim/layout.js";
+import { PlaneLayout, PLANES } from "./sim/layout.js";
 import { summarize, seedRange } from "./sim/stats.js";
 import { evenPattern } from "./sim/patterns.js";
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("c"), ctx = canvas.getContext("2d");
-const SERIES_COLORS = ["#f2a03d", "#4f9dde", "#7fd17f", "#e0645c", "#c28cf0", "#5fd0c8", "#e6d35a", "#f78fb3"];
-const ZONE_COLORS = ["#2c7fb8", "#41b6c4", "#a1dab4", "#fdae61", "#d7191c"]; // zone 1 (boards first) .. zone 5
+const SERIES_COLORS = ["#e6d35a", "#5fd0c8", "#f78fb3", "#b0b8ff", "#ff9e7a", "#9be37a", "#ffffff", "#c9a27e"];
+const ZONE_COLORS = ["#4f9dde", "#f2a03d", "#7fd17f", "#e0645c", "#c28cf0"]; // same as the game
 
 // --- worker plumbing -----------------------------------------------------
 const worker = new Worker(new URL("./stats-worker.js", import.meta.url), { type: "module" });
@@ -22,7 +22,7 @@ worker.onmessage = ({ data }) => {
 const call = (type, args, onProgress = () => {}) => new Promise((resolve) => {
   const id = ++nextId;
   pending.set(id, { resolve, onProgress });
-  worker.postMessage({ id, type, rows: layout.rows, seatsPerSide: layout.seatsPerSide, ...args });
+  worker.postMessage({ id, type, rows: layout.rows, blocks: layout.blocks, ...args });
 });
 
 // --- state ---------------------------------------------------------------
@@ -34,7 +34,7 @@ const trainSeeds = () => seedRange(1, big() ? 30 : 100);
 const evalSeeds = () => seedRange(10001, Math.max(100, Number($("n").value) | 0)); // separate from training seeds
 
 const hashPlan = (() => {
-  const m = /z=([0-4]+)/.exec(location.hash);
+  const m = /z=([0-9]+)/.exec(location.hash);
   return m ? [...m[1]].map(Number) : null;
 })();
 
@@ -43,7 +43,7 @@ function resetSeries() {
   if (hashPlan && hashPlan.length === layout.seatCount) series.push({ name: "Your plan (from the game)", zoneOfSeat: hashPlan });
   series.push({ name: "Standing line (1 zone)", zoneOfSeat: Array(layout.seatCount).fill(0) });
   series.push({ name: "Rows, back to front · even zones", zoneOfSeat: evenPattern(layout, 0, zones) });
-  if (layout.seatsPerSide > 1) series.push({ name: "Window to aisle · even zones", zoneOfSeat: evenPattern(layout, 90, zones) });
+  if (layout.maxDistance > 0) series.push({ name: "Window to aisle · even zones", zoneOfSeat: evenPattern(layout, 90, zones) });
 }
 
 async function evaluateMissing() {
@@ -67,23 +67,26 @@ function setBusy(on, msg) {
 function restart() {
   generation++;
   pending.clear();
-  layout = new PlaneLayout(Math.max(2, Number($("rows").value) | 0), Math.max(1, Math.min(5, Number($("perSide").value) | 0)));
+  const blocks = $("blocks").value.split(/[^0-9]+/).map(Number).filter((n) => n > 0).map((n) => Math.min(n, 6));
+  layout = new PlaneLayout(Math.max(2, Math.min(80, Number($("rows").value) | 0)), blocks.length >= 2 ? blocks : [1, 1]);
+  $("blocks").value = layout.label;
   zones = Number($("zones").value);
   resetSeries();
   setBusy(false, "");
   evaluateMissing();
 }
 
+$("preset").innerHTML = Object.entries(PLANES).map(([k, p]) => `<option value="${k}">${p.name}</option>`).join("") +
+  `<option value="custom">Custom</option>`;
 $("preset").onchange = () => {
-  const v = $("preset").value;
-  if (v !== "custom") {
-    const [r, p] = v.split(",").map(Number);
-    $("rows").value = r; $("perSide").value = p;
-    $("n").value = r * p * 2 > 60 ? 500 : 2000;
+  const p = PLANES[$("preset").value];
+  if (p) {
+    $("rows").value = p.rows; $("blocks").value = p.blocks.join("-");
+    $("n").value = p.rows * p.blocks.reduce((a, b) => a + b, 0) > 60 ? 300 : 2000;
   }
   restart();
 };
-$("rows").onchange = $("perSide").onchange = () => { $("preset").value = "custom"; restart(); };
+$("rows").onchange = $("blocks").onchange = () => { $("preset").value = "custom"; restart(); };
 $("zones").onchange = restart;
 $("n").onchange = () => { for (const s of series) s.sum = null; evaluateMissing(); };
 
@@ -170,14 +173,14 @@ function niceStep(raw) {
   return [1, 2, 5, 10].map((m) => m * p).find((s) => s >= raw) ?? 10 * p;
 }
 
-// Seat map: rows left (front) to right (back); seat columns top to bottom with a gap for the aisle.
+// Seat map: rows left (front) to right (back); seat columns top to bottom with a gap for each aisle.
 function zoneMap(zoneOfSeat) {
   const cell = Math.max(3, Math.min(10, Math.floor(240 / layout.rows)));
   const c = document.createElement("canvas");
-  c.width = layout.rows * cell; c.height = (layout.cols + 1) * cell;
+  c.width = layout.rows * cell; c.height = (layout.cols + layout.aisleCount) * cell;
   const g = c.getContext("2d");
   for (let s = 0; s < layout.seatCount; s++) {
-    const col = layout.seatCol(s), yCell = col < layout.seatsPerSide ? col : col + 1;
+    const col = layout.seatCol(s), yCell = col + layout.colInfo[col].block;
     g.fillStyle = ZONE_COLORS[zoneOfSeat[s] % ZONE_COLORS.length];
     g.fillRect(layout.seatRow(s) * cell, yCell * cell, cell - 1, cell - 1);
   }
@@ -185,4 +188,6 @@ function zoneMap(zoneOfSeat) {
 }
 
 window.addEventListener("resize", render);
-restart();
+const hashPlane = /p=(\w+)/.exec(location.hash)?.[1];
+if (PLANES[hashPlane]) $("preset").value = hashPlane;
+$("preset").onchange();

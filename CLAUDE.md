@@ -7,6 +7,7 @@ Web prototype first (vanilla JS ES modules + canvas). Godot 4 comes later; keep 
 - Randomness only from the flight's seeded RNG (`src/sim/rng.js`).
 - Visuals only read sim state.
 - Placeholder numbers; tune by playtesting. Don't invent "realistic" boarding values.
-- Scope contract: Tier 1 prototype (see README). No later tiers or parked features without a doc change.
-- Simplest structure for one gate, one plane. No frameworks or build step unless needed.
+- Scope: what the README's Status lists. New systems or planes only when Dan asks for them.
+- Simplest structure for one gate, one plane at a time. No frameworks or build step unless needed.
+- Planes are data (`PLANES`: rows + seat blocks); nothing may assume one aisle or a fixed seat count.
 - Run `npm test` after every sim change.
