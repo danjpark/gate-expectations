@@ -1,34 +1,26 @@
-// Dev analysis: distribution per plan, and a search for the best plan.
-// Usage: node tools/analyze.js
+// Dev analysis from the command line. Usage: node tools/analyze.js [rows] [seatsPerSide] [zones]
 import { PlaneLayout } from "../src/sim/layout.js";
-import { runBatch, summarize, optimizePlan, bestGap, seedRange } from "../src/sim/stats.js";
+import { runBatch, summarize, seedRange } from "../src/sim/stats.js";
+import { searchPatterns, evenPattern } from "../src/sim/patterns.js";
 
-const layout = new PlaneLayout();
-const train = seedRange(1, 100);
-const holdout = seedRange(10001, 2000); // never seen by the optimizer
-const rows = (f) => Array.from({ length: layout.seatCount }, (_, s) => (f(layout.seatRow(s), layout.seatCol(s)) ? 0 : 1));
-const baselines = {
-  "standing line (1 zone)": rows(() => true),
-  "front half first": rows((r) => r < 6),
-  "back half first": rows((r) => r >= 6),
-  "window seats first": rows((r, c) => c === 0),
+const [rows = 12, perSide = 2, zones = 3] = process.argv.slice(2).map(Number);
+const layout = new PlaneLayout(rows, perSide);
+const big = layout.seatCount > 60;
+const train = seedRange(1, big ? 30 : 100);
+const holdout = seedRange(10001, big ? 300 : 2000);
+const report = (name, z) => {
+  const s = summarize(runBatch(layout, z, holdout));
+  console.log(`${s.mean.toFixed(2).padStart(8)} ±${s.sd.toFixed(2)}  ${name}`);
 };
-const fmt = (n) => n.toFixed(2);
 
+console.log(`${rows} rows x ${perSide * 2} seats = ${layout.seatCount} seats, ${zones} zones`);
 let t = performance.now();
-console.log("plan                          gap  mean   sd    p10 med p90  on-time(<=45)");
-for (const [name, z] of Object.entries(baselines)) {
-  const { gap } = bestGap(layout, z, train);
-  const s = summarize(runBatch(layout, z, gap, holdout), 45);
-  console.log(`${name.padEnd(30)}${String(gap).padStart(3)}  ${fmt(s.mean)} ${fmt(s.sd)}  ${s.p10}  ${s.median}  ${s.p90}   ${(s.onTime * 100).toFixed(0)}%`);
-}
-console.log(`(baselines: ${(performance.now() - t).toFixed(0)} ms)\n`);
+report("Standing line", Array(layout.seatCount).fill(0));
+report("Rows back to front, even", evenPattern(layout, 0, zones));
+if (perSide > 1) report("Window to aisle, even", evenPattern(layout, 90, zones));
+console.log(`baselines ${(performance.now() - t).toFixed(0)} ms`);
 
 t = performance.now();
-const best = optimizePlan({ layout, trainSeeds: train, starts: Object.values(baselines), restarts: 6 });
-const s = summarize(runBatch(layout, best.zoneOfSeat, best.gap, holdout), 45);
-console.log(`optimizer (${((performance.now() - t) / 1000).toFixed(1)} s): gap ${best.gap}, train mean ${fmt(best.trainMean)}, held-out mean ${fmt(s.mean)} sd ${fmt(s.sd)} on-time ${(s.onTime * 100).toFixed(0)}%`);
-console.log("zones by row (window/aisle):");
-for (let r = 0; r < layout.rows; r++) {
-  console.log(`  row ${String(r + 1).padStart(2)}: ${best.zoneOfSeat[r * 2] + 1} ${best.zoneOfSeat[r * 2 + 1] + 1}`);
-}
+const found = searchPatterns({ layout, zones, trainSeeds: train });
+console.log(`search ${((performance.now() - t) / 1000).toFixed(1)} s, ${found.reduce((a, r) => a + r.evaluations, 0)} plans tried`);
+for (const r of found.slice(0, 4)) report(r.label, r.zoneOfSeat);

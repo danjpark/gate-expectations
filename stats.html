@@ -7,21 +7,24 @@
 <style>
   :root { color-scheme: dark; }
   body { margin: 0; background: #1b1f2a; color: #eef; font: 15px system-ui, sans-serif; }
-  main { max-width: 1000px; margin: 0 auto; padding: 16px; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; }
   h1 { margin: 0 0 4px; font-size: 22px; }
   a { color: #8ec1ff; }
   .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 12px 0; }
   button, input, select { font: inherit; }
   button { background: #2f6fb3; color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; cursor: pointer; }
-  button:disabled { background: #3a4050; color: #8a90a0; }
+  button:disabled { background: #3a4050; color: #8a90a0; cursor: default; }
   input, select { padding: 6px; background: #252b3a; color: #eef; border: 1px solid #3a4258; border-radius: 6px; }
-  input { width: 5.5em; }
-  canvas { width: 100%; height: auto; background: #252b3a; border-radius: 8px; display: block; }
+  input { width: 4.5em; }
+  canvas#c { width: 100%; height: auto; background: #252b3a; border-radius: 8px; display: block; }
+  .scroll { overflow-x: auto; }
   table { border-collapse: collapse; width: 100%; margin-top: 12px; }
-  th, td { text-align: right; padding: 6px 10px; border-bottom: 1px solid #333b50; }
-  th:first-child, td:first-child { text-align: left; }
+  th, td { text-align: right; padding: 6px 10px; border-bottom: 1px solid #333b50; vertical-align: middle; }
+  th.l, td.l { text-align: left; }
+  td.map canvas { display: block; }
   .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 8px; vertical-align: -1px; }
-  #note { color: #a9b2cc; min-height: 1.4em; }
+  #note, .legend { color: #a9b2cc; min-height: 1.4em; }
+  .legend span { display: inline-block; width: 14px; height: 10px; margin: 0 4px 0 10px; vertical-align: 0; }
 </style>
 </head>
 <body>
@@ -29,14 +32,25 @@
   <h1>Boarding time distributions</h1>
   <div><a href="index.html">&larr; back to the game</a> &middot; dev tool, not part of the game</div>
   <div class="row">
+    <label>Plane <select id="preset">
+      <option value="12,1">Tier 1 · 24 seats</option>
+      <option value="12,2">Tier 2 · 48 seats</option>
+      <option value="34,3">Narrow-body · 204 seats</option>
+      <option value="custom">Custom</option>
+    </select></label>
+    <label>Rows <input id="rows" type="number" min="2" max="80" value="12"></label>
+    <label>Seats per side <input id="perSide" type="number" min="1" max="5" value="1"></label>
+    <label>Zones <select id="zones"><option>2</option><option>3</option><option>4</option><option>5</option></select></label>
     <label>Simulation flights <input id="n" type="number" value="2000" min="100" max="20000" step="100"></label>
-    <label>Zones <select id="zones"><option>2</option><option>3</option></select></label>
-    <button id="bands">Best row bands</button>
-    <button id="opt">Local search</button>
   </div>
-  <div id="note"></div>
-  <canvas id="c" width="1000" height="360"></canvas>
-  <table id="t"></table>
+  <div class="row">
+    <button id="search">Search zone patterns</button>
+    <button id="refine">Refine best seat by seat</button>
+    <span id="note"></span>
+  </div>
+  <canvas id="c" width="1100" height="340"></canvas>
+  <div class="legend" id="legend"></div>
+  <div class="scroll"><table id="t"></table></div>
 </main>
 <script type="module" src="src/stats-main.js"></script>
 </body>

@@ -22,6 +22,15 @@ npm start    # serves http://localhost:5173
 npm test     # headless simulation tests
 ```
 
+## Stats tool (dev only)
+
+`stats.html` runs many seeded simulation flights per zone plan and overlays the boarding-time
+distributions, with a seat map of each plan. Works for any single-aisle plane (rows x seats per side)
+and up to 5 zones. Zone patterns rank seats by a blend of row (back to front) and seat depth
+(window to aisle), then cut the ranking into zones (`src/sim/patterns.js`). The search tunes the
+cuts for several blend angles; an optional pass then refines single seats. CLI version:
+`node tools/analyze.js 34 3 5` (rows, seats per side, zones).
+
 ## Layout
 
 - `src/sim/` pure JS: layout, plan, manifest, passenger, boarding sim, seeded RNG. No DOM, no clock, no `Math.random`.

@@ -5,6 +5,7 @@ import { State } from "./passenger.js";
 // Aisle cells 0..WALKWAY_CELLS-1 are the jet bridge; the plane door is cell WALKWAY_CELLS,
 // and row r is reached at cell WALKWAY_CELLS + r + 1.
 export const SEAT_TICKS = 2;     // placeholder: ticks spent in the aisle sitting down
+export const SHUFFLE_TICKS = 2;  // placeholder: extra ticks per seated neighbour who must stand up to let you in
 export const WALKWAY_CELLS = 4;  // placeholder: jet bridge length
 
 export class BoardingSim {
@@ -17,6 +18,7 @@ export class BoardingSim {
       p.targetCell = WALKWAY_CELLS + p.row + 1;
     }
     this.aisle = new Array(WALKWAY_CELLS + layout.rows + 1).fill(-1); // passenger id or -1
+    this.seatTaken = new Array(layout.seatCount).fill(false);
     this.gateQueue = [];
     this.tick = 0;
     this.zonesReleased = 0;
@@ -46,6 +48,7 @@ export class BoardingSim {
           p.state = State.SEATED;
           p.cell = -1;
           p.seatedTick = this.tick;
+          this.seatTaken[p.seat] = true;
           this.seatedCount++;
         }
         continue;
@@ -54,7 +57,7 @@ export class BoardingSim {
         this.aisle[c + 1] = p.id;
         this.aisle[c] = -1;
         p.cell = c + 1;
-        if (p.cell === p.targetCell) p.seatingLeft = SEAT_TICKS;
+        if (p.cell === p.targetCell) p.seatingLeft = SEAT_TICKS + SHUFFLE_TICKS * this.seatBlockers(p);
       } else {
         p.blocked++;
       }
@@ -73,9 +76,19 @@ export class BoardingSim {
     }
   }
 
+  // Seat interference: seated passengers between this passenger's seat and the aisle.
+  seatBlockers(p) {
+    const L = this.layout, side = L.seatSide(p.seat);
+    let n = 0;
+    for (let d = L.seatDepth(p.seat) + 1; d < L.seatsPerSide; d++) {
+      if (this.seatTaken[L.seatAt(p.row, side, d)]) n++;
+    }
+    return n;
+  }
+
   // Headless helper: release a zone every `gap` ticks, run to completion.
   // Returns boarding time in ticks, or -1 if it did not finish.
-  runAuto(gap, maxTicks = 1000) {
+  runAuto(gap, maxTicks = 20000) {
     this.releaseNextZone();
     while (!this.done && this.tick < maxTicks) {
       if (gap > 0 && this.tick % gap === 0) this.releaseNextZone();
