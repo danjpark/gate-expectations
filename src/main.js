@@ -35,6 +35,7 @@ function reset() {
   refresh();
 }
 function refresh() {
+  $("analyze").href = `stats.html#z=${plan.zoneOfSeat.join("")}`;
   $("go").disabled = phase !== "plan";
   $("release").disabled = phase !== "running" || !sim.canRelease;
   $("retry").disabled = phase === "plan";
@@ -127,6 +128,7 @@ canvas.addEventListener("pointerleave", () => { mouse = null; });
 
 // While planning, keep a fresh sim so the waiting room shows the zones as painted.
 function rebuildPlanSim() {
+  refresh();
   sim = new BoardingSim(layout, plan, seed);
   snapTo(true);
 }
