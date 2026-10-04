@@ -73,13 +73,13 @@ const zoneSizes = (zoneOfSeat) => {
 };
 
 // For one angle: start from even cuts, then move each cut by +-step, halving the step when stuck.
-export function tuneCuts({ layout, angle, zones, trainSeeds }) {
+export function tuneCuts({ layout, angle, zones, trainSeeds, order }) {
   const groups = seatGroups(layout, angle);
   const G = groups.length;
   const cache = new Map();
   const score = (cuts) => {
     const key = cuts.join(",");
-    if (!cache.has(key)) cache.set(key, meanTicks(layout, planFromCuts(layout, groups, cuts), trainSeeds));
+    if (!cache.has(key)) cache.set(key, meanTicks(layout, planFromCuts(layout, groups, cuts), trainSeeds, order));
     return cache.get(key);
   };
   let cuts = evenCuts(groups, zones), best = score(cuts);
@@ -105,13 +105,13 @@ export function tuneCuts({ layout, angle, zones, trainSeeds }) {
 
 // Best pattern per angle, sorted best first. Planes where every seat is an aisle seat have no
 // window/aisle choice, so only the row angle is searched there.
-export function searchPatterns({ layout, zones, trainSeeds, angles = SEARCH_ANGLES, onProgress = () => {} }) {
+export function searchPatterns({ layout, zones, trainSeeds, order, angles = SEARCH_ANGLES, onProgress = () => {} }) {
   const use = layout.maxDistance === 0 ? [0] : angles;
   const byPlan = new Map(); // different angles can land on the same plan; keep one, note the angles
   use.forEach((angle, i) => {
     onProgress(`${patternName(angle)} (${i + 1}/${use.length})`);
-    const r = tuneCuts({ layout, angle, zones, trainSeeds });
-    const key = r.zoneOfSeat.join("");
+    const r = tuneCuts({ layout, angle, zones, trainSeeds, order });
+    const key = r.zoneOfSeat.join(",");
     if (byPlan.has(key)) byPlan.get(key).angles.push(angle);
     else byPlan.set(key, { ...r, angles: [angle] });
   });
@@ -122,16 +122,16 @@ export function searchPatterns({ layout, zones, trainSeeds, angles = SEARCH_ANGL
 
 // Seat-by-seat refinement: random single-seat zone changes, kept only if they lower the mean.
 // Works for any plane size because it has a fixed evaluation budget.
-export function refineSeats({ layout, zones, trainSeeds, start, budget = 400, rngSeed = 1, onProgress = () => {} }) {
+export function refineSeats({ layout, zones, trainSeeds, start, order, budget = 400, rngSeed = 1, onProgress = () => {} }) {
   const rng = makeRng(rngSeed);
   const z = start.slice();
-  let best = meanTicks(layout, z, trainSeeds), accepted = 0;
+  let best = meanTicks(layout, z, trainSeeds, order), accepted = 0;
   for (let i = 0; i < budget && zones > 1; i++) {
     const s = rng.int(0, z.length - 1);
     const v = rng.int(0, zones - 2);
     const old = z[s];
     z[s] = v >= old ? v + 1 : v;
-    const m = meanTicks(layout, z, trainSeeds);
+    const m = meanTicks(layout, z, trainSeeds, order);
     if (m < best - 1e-9) { best = m; accepted++; } else z[s] = old;
     if (i % 25 === 0) onProgress(`seat moves ${i}/${budget}, kept ${accepted}`);
   }
