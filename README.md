@@ -25,7 +25,8 @@ Needs Node 20+ (no dependencies to install).
 
 ```bash
 npm start    # serves http://localhost:5173
-npm test     # headless simulation tests
+npm test     # headless simulation and regression tests
+npm run check # syntax checks (no build step)
 ```
 
 ## Stats tool (dev only)
@@ -36,6 +37,16 @@ distributions, with a seat map of each plan. Works for any plane given as rows x
 distance from the aisle (window first), then cut the ranking into zones (`src/sim/patterns.js`).
 The search tunes the cuts for several blend angles; an optional pass then refines single seats.
 CLI version: `node tools/analyze.js 32 3-4-3 5` (rows, seat blocks, zones).
+
+Analysis uses the game's queue-empty auto-call policy by default; the game's analysis link
+includes the chosen automatic zone order. It does not replay a manually called flight.
+`runBatch` still accepts an explicit integer zone-call gap for experiments.
+
+## Review and migration
+
+- [Engineering review and fixes](docs/engineering-review.md)
+- [Game design review and measured baseline results](docs/game-design-review.md)
+- [Godot 4 migration plan and shared test fixtures](docs/godot-port.md)
 
 ## Layout
 

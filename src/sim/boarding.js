@@ -1,5 +1,7 @@
 import { generateManifest } from "./manifest.js";
 import { State, Phase } from "./passenger.js";
+import { validateZoneMap } from "./plan.js";
+import { BOARDING, MAX_FLIGHT_TICKS } from "./tuning.js";
 
 // Deterministic boarding sim. Fixed ticks, integer cells, no DOM, no Date, no Math.random.
 //
@@ -10,20 +12,23 @@ import { State, Phase } from "./passenger.js";
 // Seat shuffle: reaching your row with seated neighbours between you and your seat, you wait until the
 // aisle cell just past your row is free; the neighbours stand up into it (both cells now blocked),
 // you sit, then they step back into your row's cell and sit down again (that cell stays blocked).
-export const WALKWAY_CELLS = 4;    // placeholder: jet bridge length
-export const SEAT_TICKS = 2;       // placeholder: ticks to sit down
-export const UNSEAT_TICKS = 2;     // placeholder: ticks per neighbour to stand up and step out
-export const RESEAT_TICKS = 2;     // placeholder: ticks per neighbour to sit back down
+// Re-export for existing view and test consumers.
+export const WALKWAY_CELLS = BOARDING.walkwayCells;
+export const SEAT_TICKS = BOARDING.seatTicks;
+export const UNSEAT_TICKS = BOARDING.unseatTicks;
+export const RESEAT_TICKS = BOARDING.reseatTicks;
 const HOLD = -2;                   // aisle cell taken by standing neighbours
 
 export class BoardingSim {
   constructor(layout, plan, seed) {
     this.layout = layout;
-    this.plan = plan;
+    const zoneCount = validateZoneMap(layout, plan.zoneOfSeat, plan.maxZones);
+    // A flight owns its zone snapshot: editing a plan cannot alter an active flight.
+    this.plan = Object.freeze({ zoneOfSeat: Object.freeze(plan.zoneOfSeat.slice()), zoneCount });
     this.passengers = generateManifest(layout, seed);
     this.bySeat = [];
     for (const p of this.passengers) {
-      p.zone = plan.zoneOfSeat[p.seat];
+      p.zone = this.plan.zoneOfSeat[p.seat];
       p.targetCell = p.row + 1;
       this.bySeat[p.seat] = p;
     }
@@ -32,7 +37,7 @@ export class BoardingSim {
     this.seatTaken = new Array(layout.seatCount).fill(false);
     this.reseating = [];             // { lane, cell, ids, timer }
     this.gateQueue = [];
-    this.released = new Array(plan.zoneCount).fill(false);
+    this.released = new Array(zoneCount).fill(false);
     this.tick = 0;
     this.seatedCount = 0;
   }
@@ -45,13 +50,14 @@ export class BoardingSim {
 
   // Call one zone to the door. Zones can be called in any order, each once.
   releaseZone(zone) {
-    if (zone < 0 || zone >= this.zoneCount || this.released[zone]) return;
+    if (!Number.isInteger(zone) || zone < 0 || zone >= this.zoneCount || this.released[zone]) return false;
     for (const p of this.passengers) if (p.zone === zone) this.gateQueue.push(p);
     this.released[zone] = true;
+    return true;
   }
   // Call the first not-yet-called zone in `order` (defaults to 1, 2, 3...).
   releaseNextZone(order = this.defaultOrder()) {
-    const next = order.find((z) => !this.released[z]);
+    const next = order.find((z) => Number.isInteger(z) && z >= 0 && z < this.zoneCount && !this.released[z]);
     if (next !== undefined) this.releaseZone(next);
   }
   defaultOrder() { return Array.from({ length: this.zoneCount }, (_, i) => i); }
@@ -161,10 +167,19 @@ export class BoardingSim {
 
   // Headless helper: call a zone every `gap` ticks in `order`, run to completion.
   // Returns boarding time in ticks, or -1 if it did not finish.
-  runAuto(gap, maxTicks = 20000, order = this.defaultOrder()) {
+  runAuto(gap, maxTicks = MAX_FLIGHT_TICKS, order = this.defaultOrder()) {
     this.releaseNextZone(order);
     while (!this.done && this.tick < maxTicks) {
-      if (gap > 0 && this.tick % gap === 0) this.releaseNextZone(order);
+      if (gap > 0 && this.tick > 0 && this.tick % gap === 0) this.releaseNextZone(order);
+      this.step();
+    }
+    return this.done ? this.tick : -1;
+  }
+
+  // The same queue-empty caller used by the game's upgrade; analysis uses this by default.
+  runAutoCall(maxTicks = MAX_FLIGHT_TICKS, order = this.defaultOrder()) {
+    while (!this.done && this.tick < maxTicks) {
+      this.autoCall(order);
       this.step();
     }
     return this.done ? this.tick : -1;

@@ -1,3 +1,5 @@
+import { MOOD } from "./tuning.js";
+
 // STANDING: a seated passenger who got up into the aisle to let someone reach an inner seat.
 export const State = Object.freeze({ AT_GATE: 0, IN_AISLE: 1, SEATED: 2, STANDING: 3 });
 
@@ -28,7 +30,7 @@ export class Passenger {
   }
   // 0..100, lower is unhappier. Placeholder weights; never feeds back into the sim.
   mood() {
-    const sourness = this.gateWait + 2 * this.blocked + 0.5 * this.seatedWait;
-    return Math.max(0, Math.min(100, 100 - Math.trunc((sourness * 6) / this.patience)));
+    const sourness = this.gateWait + MOOD.blockedWeight * this.blocked + MOOD.seatedWeight * this.seatedWait;
+    return Math.max(0, Math.min(100, 100 - Math.trunc((sourness * MOOD.sournessScale) / this.patience)));
   }
 }

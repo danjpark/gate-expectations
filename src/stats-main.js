@@ -3,27 +3,36 @@
 import { PlaneLayout, PLANES } from "./sim/layout.js";
 import { summarize, seedRange } from "./sim/stats.js";
 import { evenPattern } from "./sim/patterns.js";
+import { ZONE_COLORS } from "./view/palette.js";
+import { WorkerClient } from "./analysis/worker-client.js";
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("c"), ctx = canvas.getContext("2d");
 const SERIES_COLORS = ["#e6d35a", "#5fd0c8", "#f78fb3", "#b0b8ff", "#ff9e7a", "#9be37a", "#ffffff", "#c9a27e"];
-const ZONE_COLORS = ["#4f9dde", "#f2a03d", "#7fd17f", "#e0645c", "#c28cf0"]; // same as the game
+
 
 // --- worker plumbing -----------------------------------------------------
-const worker = new Worker(new URL("./stats-worker.js", import.meta.url), { type: "module" });
-let nextId = 0, generation = 0;
-const pending = new Map();
-worker.onmessage = ({ data }) => {
-  const p = pending.get(data.id);
-  if (!p) return;
-  if ("progress" in data) p.onProgress(data.progress);
-  else { pending.delete(data.id); p.resolve(data.result); }
+const client = new WorkerClient(() => new Worker(new URL("./stats-worker.js", import.meta.url), { type: "module" }));
+let generation = 0;
+const hashArgs = new URLSearchParams(location.hash.slice(1));
+const importedOrder = (hashArgs.get("o") || "").split(",").filter(Boolean).map(Number);
+const validOrder = importedOrder.length > 0 && importedOrder.every((z, i) =>
+  Number.isInteger(z) && z >= 0 && z < importedOrder.length && importedOrder.indexOf(z) === i);
+const importedPlanFits = () => hashPlan && hashPlane === $("preset").value &&
+  hashPlan.length === layout.seatCount && hashPlan.every((z) => z < ZONE_COLORS.length);
+const analysisOrder = () => {
+  const count = Math.max(zones, importedPlanFits() ? Math.max(...hashPlan) + 1 : 0);
+  return validOrder && hashPlane === $("preset").value && importedOrder.length >= count
+    ? importedOrder : Array.from({ length: count }, (_, i) => i);
 };
-const call = (type, args, onProgress = () => {}) => new Promise((resolve) => {
-  const id = ++nextId;
-  pending.set(id, { resolve, onProgress });
-  worker.postMessage({ id, type, rows: layout.rows, blocks: layout.blocks, ...args });
-});
+const call = (type, args, onProgress) => client.request(type,
+  { rows: layout.rows, blocks: layout.blocks, order: analysisOrder(), ...args }, onProgress);
+const withErrors = (action) => async (...args) => {
+  try { await action(...args); }
+  catch (error) {
+    if (error.name !== "AbortError") setBusy(false, `Analysis failed: ${error.message}`);
+  }
+};
 
 // --- state ---------------------------------------------------------------
 let layout = new PlaneLayout(12, 1);
@@ -31,7 +40,7 @@ let zones = 2;
 let series = [];
 const big = () => layout.seatCount > 60;
 const trainSeeds = () => seedRange(1, big() ? 30 : 100);
-const evalSeeds = () => seedRange(10001, Math.max(100, Number($("n").value) | 0)); // separate from training seeds
+const evalSeeds = () => seedRange(10001, Math.max(100, Math.min(20000, Number($("n").value) | 0))); // separate from training seeds
 
 const hashPlan = (() => {
   const m = /z=([0-9]+)/.exec(location.hash);
@@ -40,7 +49,7 @@ const hashPlan = (() => {
 
 function resetSeries() {
   series = [];
-  if (hashPlan && hashPlan.length === layout.seatCount) series.push({ name: "Your plan (from the game)", zoneOfSeat: hashPlan });
+  if (importedPlanFits()) series.push({ name: "Your plan (from the game)", zoneOfSeat: hashPlan });
   series.push({ name: "Standing line (1 zone)", zoneOfSeat: Array(layout.seatCount).fill(0) });
   series.push({ name: "Rows, back to front · even zones", zoneOfSeat: evenPattern(layout, 0, zones) });
   if (layout.maxDistance > 0) series.push({ name: "Window to aisle · even zones", zoneOfSeat: evenPattern(layout, 90, zones) });
@@ -48,6 +57,7 @@ function resetSeries() {
 
 async function evaluateMissing() {
   const gen = generation;
+  $("n").value = evalSeeds().length;
   const todo = series.filter((s) => !s.sum);
   if (!todo.length) return render();
   setBusy(true, `Running ${todo.length * evalSeeds().length} simulation flights...`);
@@ -66,14 +76,16 @@ function setBusy(on, msg) {
 // Any change to the plane or zone count starts over.
 function restart() {
   generation++;
-  pending.clear();
+  client.stop();
   const blocks = $("blocks").value.split(/[^0-9]+/).map(Number).filter((n) => n > 0).map((n) => Math.min(n, 6));
   layout = new PlaneLayout(Math.max(2, Math.min(80, Number($("rows").value) | 0)), blocks.length >= 2 ? blocks : [1, 1]);
   $("blocks").value = layout.label;
   zones = Number($("zones").value);
+  $("policy").textContent = `Queue-empty auto-call · order ${analysisOrder().map((z) => z + 1).join(" → ")}`;
   resetSeries();
+  render();
   setBusy(false, "");
-  evaluateMissing();
+  withErrors(evaluateMissing)();
 }
 
 $("preset").innerHTML = Object.entries(PLANES).map(([k, p]) => `<option value="${k}">${p.name}</option>`).join("") +
@@ -82,15 +94,22 @@ $("preset").onchange = () => {
   const p = PLANES[$("preset").value];
   if (p) {
     $("rows").value = p.rows; $("blocks").value = p.blocks.join("-");
+    $("zones").value = p.maxZones;
     $("n").value = p.rows * p.blocks.reduce((a, b) => a + b, 0) > 60 ? 300 : 2000;
   }
   restart();
 };
 $("rows").onchange = $("blocks").onchange = () => { $("preset").value = "custom"; restart(); };
 $("zones").onchange = restart;
-$("n").onchange = () => { for (const s of series) s.sum = null; evaluateMissing(); };
+$("n").onchange = () => {
+  generation++;
+  client.stop();
+  for (const s of series) { s.sum = null; s.ticks = []; }
+  render();
+  withErrors(evaluateMissing)();
+};
 
-$("search").onclick = async () => {
+$("search").onclick = withErrors(async () => {
   const gen = generation;
   setBusy(true, "Searching...");
   const found = await call("search", { zones, trainSeeds: trainSeeds() }, (t) => { $("note").textContent = `Searching: ${t}`; });
@@ -98,26 +117,28 @@ $("search").onclick = async () => {
   series = series.filter((s) => !s.name.startsWith("Pattern #"));
   found.slice(0, 3).forEach((r, i) => series.push({ name: `Pattern #${i + 1}: ${r.label}`, zoneOfSeat: r.zoneOfSeat }));
   await evaluateMissing();
+  if (gen !== generation) return;
   $("note").textContent = `Patterns tuned on ${trainSeeds().length} training seeds; curves use ${evalSeeds().length} different seeds.`;
-};
+});
 
-$("refine").onclick = async () => {
+$("refine").onclick = withErrors(async () => {
   const gen = generation;
-  const start = series.filter((s) => s.sum).sort((a, b) => a.sum.mean - b.sum.mean)[0];
+  if (!series.length) return;
   setBusy(true, "Refining...");
-  const r = await call("refine", { zones, trainSeeds: trainSeeds(), start: start.zoneOfSeat, budget: big() ? 300 : 400 },
-    (t) => { $("note").textContent = `Refining "${start.name.split(":")[0]}": ${t}`; });
+  const r = await call("refine", { zones, trainSeeds: trainSeeds(), candidates: series.map((s) => ({name:s.name, zoneOfSeat:s.zoneOfSeat})), budget: big() ? 300 : 400 },
+    (t) => { $("note").textContent = `Refining: ${t}`; });
   if (gen !== generation) return;
   series = series.filter((s) => !s.name.startsWith("Refined"));
-  series.push({ name: `${r.label}, from "${start.name.split(":")[0]}"`, zoneOfSeat: r.zoneOfSeat });
+  series.push({ name: `${r.label}, from "${r.startName.split(":")[0]}"`, zoneOfSeat: r.zoneOfSeat });
   await evaluateMissing();
+  if (gen !== generation) return;
   $("note").textContent = "Refinement tries single-seat zone changes and keeps those that help on the training seeds.";
-};
+});
 
 // --- drawing -------------------------------------------------------------
 function render() {
   const shown = series.filter((s) => s.sum);
-  if (!shown.length) return;
+  if (!shown.length) { ctx.clearRect(0, 0, canvas.width, canvas.height); $("t").innerHTML = ""; return; }
   const lo = Math.min(...shown.map((s) => s.sum.min)), hi = Math.max(...shown.map((s) => s.sum.max)) + 1;
   const bin = Math.max(1, Math.ceil((hi - lo) / 60));
   const hists = shown.map((s) => {
@@ -143,6 +164,7 @@ function render() {
     ctx.fillStyle = color; ctx.globalAlpha = 0.4;
     for (const [b, p] of hists[i]) ctx.fillRect(x(b), y(p), x(b + bin) - x(b) - 1, H - B - y(p));
     ctx.globalAlpha = 1;
+    if (s.sum.sd === 0) return; // a point mass has no finite normal density
     // Normal curve with the same mean and spread, scaled to the bin width.
     ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath();
     for (let t = lo; t <= hi; t += (hi - lo) / 300) {

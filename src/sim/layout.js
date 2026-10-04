@@ -17,6 +17,13 @@ export const PLANES = {
 export class PlaneLayout {
   // `blocks` may also be a number n, meaning [n, n].
   constructor(rows = 12, blocks = [1, 1]) {
+    if (!Number.isSafeInteger(rows) || rows < 1) throw new RangeError("rows must be a positive integer");
+    const sizes = typeof blocks === "number" ? [blocks, blocks] : blocks;
+    if (!Array.isArray(sizes) || sizes.length < 2 ||
+        Array.from(sizes).some((n) => !Number.isSafeInteger(n) || n < 1) ||
+        !Number.isSafeInteger(rows * sizes.reduce((a, b) => a + b, 0))) {
+      throw new RangeError("blocks must contain at least two positive integer sizes");
+    }
     this.rows = rows;
     this.blocks = typeof blocks === "number" ? [blocks, blocks] : blocks.slice();
     this.cols = this.blocks.reduce((a, b) => a + b, 0);
