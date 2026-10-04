@@ -8,6 +8,7 @@ The prototype is appropriately small and already has the most valuable architect
 
 | Priority | Finding | Consequence | Resolution |
 |---|---|---|---|
+| High | Quoted test-file glob required newer Node despite documented Node 20 support | The advertised test command failed on Node 20 | Use built-in test discovery (`node --test`); verify on Node 20 CI |
 | High | Stats released zones at fixed one-tick intervals; the upgrade waited for the lounge queue to clear | Results modeled a different calling policy; especially misleading for non-default orders | `runAutoCall` shares the game's policy; batch/search/refinement use it by default. The analysis link carries auto-call order |
 | High | Stats reset discarded promise records but left CPU work running | A stale expensive search delayed the next plane, while awaiting handlers never settled | Worker client terminates old work, rejects pending requests, handles worker errors, and creates a new worker on demand |
 | High | No validation at layout/plan/sim boundaries | Fractional zones, missing seats, or invalid aisle geometry could produce invalid or unfinished flights | Validate positive integer layout sizes, complete integer zone maps, and paint commands; ignore invalid zone-release commands |

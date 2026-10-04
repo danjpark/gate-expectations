@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Comedic airport boarding game (web prototype)",
   "scripts": {
-    "test": "node --test \"tests/*.test.js\"",
+    "test": "node --test",
     "start": "node tools/serve.js",
     "check": "node tools/check.js"
   }
