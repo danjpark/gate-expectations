@@ -17,13 +17,15 @@ export const RESEAT_TICKS = 2;     // placeholder: ticks per neighbour to sit ba
 const HOLD = -2;                   // aisle cell taken by standing neighbours
 
 export class BoardingSim {
-  constructor(layout, plan, seed) {
+  // moodTicks: the boarding time passengers treat as normal (affects only how fast mood sours).
+  constructor(layout, plan, seed, { moodTicks = 100 } = {}) {
     this.layout = layout;
     this.plan = plan;
     this.passengers = generateManifest(layout, seed);
     this.bySeat = [];
     for (const p of this.passengers) {
       p.zone = plan.zoneOfSeat[p.seat];
+      p.moodTicks = moodTicks;
       p.targetCell = p.row + 1;
       this.bySeat[p.seat] = p;
     }

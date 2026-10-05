@@ -13,6 +13,7 @@ export class Passenger {
     this.row = row;
     this.patience = patience; // trait, 1 (snappy) .. 5 (zen)
     this.zone = 0;
+    this.moodTicks = 100;     // set by the sim; see mood()
     this.state = State.AT_GATE;
     this.lane = -1;           // -1 = jet bridge, otherwise the aisle index
     this.cell = -1;           // cell within the jet bridge or aisle
@@ -27,8 +28,11 @@ export class Passenger {
     this.seatedTick = -1;
   }
   // 0..100, lower is unhappier. Placeholder weights; never feeds back into the sim.
+  // Scales with the plane (`moodTicks`, roughly a good boarding time) so a 300-tick flight isn't
+  // sourer than a 40-tick one; patience 1..5 gives 1.5x..3.5x that much tolerance.
   mood() {
     const sourness = this.gateWait + 2 * this.blocked + 0.5 * this.seatedWait;
-    return Math.max(0, Math.min(100, 100 - Math.trunc((sourness * 6) / this.patience)));
+    const tolerance = this.moodTicks * (1 + 0.5 * this.patience);
+    return Math.max(0, Math.min(100, Math.round(100 - (100 * sourness) / tolerance)));
   }
 }

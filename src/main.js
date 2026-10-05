@@ -41,7 +41,6 @@ function setPlane(key) {
   brush = Math.min(1, p.maxZones - 1);
   $("speed").value = layout.seatCount <= 24 ? "1" : layout.seatCount <= 60 ? "2" : "10";
   geo = makeGeo();
-  renderBrushes();
   reset();
 }
 
@@ -110,9 +109,13 @@ function snapTo(instant) {
   t0 = now;
 }
 
+function makeSim() {
+  return new BoardingSim(layout, plan, seed, { moodTicks: PLANES[planeKey].target });
+}
+
 // --- flow --------------------------------------------------------------------
 function reset() {
-  sim = new BoardingSim(layout, plan, seed);
+  sim = makeSim();
   phase = "plan";
   acc = 0;
   lastEarned = 0;
@@ -120,7 +123,7 @@ function reset() {
   refresh();
 }
 function start() {
-  sim = new BoardingSim(layout, plan, seed);
+  sim = makeSim();
   snapTo(true);
   phase = "running";
 }
@@ -137,83 +140,94 @@ function ensureOrder() {
   if (callOrder.length !== n || callOrder.some((z) => z >= n)) callOrder = Array.from({ length: n }, (_, i) => i);
 }
 
+const el = (tag, props = {}, ...kids) => {
+  const e = Object.assign(document.createElement(tag), props);
+  e.append(...kids);
+  return e;
+};
+
 function refresh() {
   ensureOrder();
-  const manual = !(save.autoCall && autoOn);
-  $("go").style.display = manual ? "none" : "";
-  $("go").disabled = phase !== "plan";
-  $("retry").disabled = phase === "plan";
+  const auto = save.autoCall && autoOn;
+  const planning = phase === "plan";
+  $("go").hidden = !auto;
+  $("go").disabled = !planning;
+  $("retry").disabled = planning;
   $("money").textContent = `$${save.money}`;
   $("analyze").href = `stats.html#p=${planeKey}&z=${plan.zoneOfSeat.join("")}`;
-  for (const b of $("brushBar").querySelectorAll("button")) b.disabled = phase !== "plan";
+  renderZones(auto, planning);
+  renderUpgrade();
+}
 
-  // Manual calling: any zone, in any order; the first call starts the flight.
-  const callBar = $("callBar");
-  callBar.innerHTML = "";
-  if (manual && phase !== "done") {
-    for (let z = 0; z < plan.zoneCount; z++) {
-      const b = document.createElement("button");
-      b.className = "zone";
-      b.style.background = ZONE_COLORS[z];
-      b.textContent = `Call zone ${z + 1}`;
-      b.disabled = sim.isReleased(z);
-      b.onclick = () => {
-        if (phase === "plan") start();
-        snapTo(false);
-        sim.releaseZone(z);
-        refresh();
-      };
-      callBar.appendChild(b);
+// One row per zone: swatch, name, Paint (choose the brush) and Call (send that zone to the gate).
+function renderZones(auto, planning) {
+  const counts = Array(plan.maxZones).fill(0);
+  for (const z of plan.zoneOfSeat) counts[z]++;
+
+  const calling = $("calling");
+  calling.hidden = !save.autoCall;
+  calling.innerHTML = "";
+  if (save.autoCall) {
+    for (const [value, text] of [[false, "Manual"], [true, "Auto"]]) {
+      const radio = el("input", { type: "radio", name: "calling", checked: auto === value, disabled: !planning });
+      radio.onchange = () => { autoOn = save.autoOn = value; persist(); refresh(); };
+      calling.append(el("label", {}, radio, ` ${text}`));
     }
   }
-  renderAutoBar();
+
+  $("callHead").style.visibility = auto ? "hidden" : "visible";
+  const rows = $("zoneRows");
+  rows.innerHTML = "";
+  for (let z = 0; z < plan.maxZones; z++) {
+    const paintBtn = el("button", { className: "paint" + (z === brush ? " active" : ""), textContent: "Paint", disabled: !planning });
+    paintBtn.onclick = () => { brush = z; renderZones(auto, planning); };
+    const callBtn = el("button", { className: "call", textContent: `Call ${z + 1}`,
+      disabled: sim.isReleased(z) || z >= sim.zoneCount || counts[z] === 0 || phase === "done" });
+    callBtn.style.background = ZONE_COLORS[z];
+    callBtn.style.visibility = auto ? "hidden" : "visible";
+    callBtn.onclick = () => {
+      if (phase === "plan") start();
+      snapTo(false);
+      sim.releaseZone(z);
+      refresh();
+    };
+    const swatch = el("span", { className: "swatch" });
+    swatch.style.background = ZONE_COLORS[z];
+    rows.append(el("div", { className: "zone-row" }, swatch,
+      el("span", { className: "zone-name" }, `Zone ${z + 1}`, el("span", { className: "zone-count", textContent: `${counts[z]} seats` })),
+      paintBtn, callBtn));
+  }
+
+  const order = $("order");
+  order.innerHTML = "";
+  if (auto) {
+    order.append(el("span", { className: "proto", textContent: "Auto-call order:" }));
+    callOrder.forEach((z, i) => {
+      const move = (d) => { [callOrder[i], callOrder[i + d]] = [callOrder[i + d], callOrder[i]]; refresh(); };
+      const left = el("button", { className: "tiny", textContent: "◀", disabled: i === 0 || !planning });
+      const right = el("button", { className: "tiny", textContent: "▶", disabled: i === callOrder.length - 1 || !planning });
+      left.onclick = () => move(-1);
+      right.onclick = () => move(1);
+      const chip = el("span", { className: "chip" }, left, `Zone ${z + 1}`, right);
+      chip.style.background = ZONE_COLORS[z];
+      order.append(chip);
+    });
+  }
+  $("zoneHint").textContent = auto
+    ? "Drag across seats to paint, then press Go. Zones are called in the order above."
+    : `Pick a zone's Paint button, then drag across seats (up to ${plan.maxZones} zones here). Call zones in any order; the first call starts boarding.`;
 }
 
-function renderAutoBar() {
-  const bar = $("autoBar");
-  bar.innerHTML = "";
-  if (!save.autoCall) {
-    const b = document.createElement("button");
-    b.textContent = `Upgrade: auto-call zones ($${AUTO_CALL_COST})`;
-    b.disabled = save.money < AUTO_CALL_COST;
-    b.onclick = () => { save.money -= AUTO_CALL_COST; save.autoCall = true; autoOn = save.autoOn = true; persist(); refresh(); };
-    bar.append(b, Object.assign(document.createElement("span"), { className: "label",
-      textContent: " Calls the next zone as soon as the lounge line clears. Earn $ by finishing flights, more if on time." }));
+function renderUpgrade() {
+  const box = $("upgradeBox");
+  box.innerHTML = "";
+  if (save.autoCall) {
+    box.append(el("div", { className: "proto", textContent: "✓ Auto-call zones (owned)" }));
     return;
   }
-  const label = document.createElement("label");
-  const box = Object.assign(document.createElement("input"), { type: "checkbox", checked: autoOn, disabled: phase !== "plan" });
-  box.onchange = () => { autoOn = save.autoOn = box.checked; persist(); refresh(); };
-  label.append(box, " Auto-call zones");
-  bar.appendChild(label);
-  if (!autoOn) return;
-  bar.append(Object.assign(document.createElement("span"), { className: "label", textContent: "Order:" }));
-  callOrder.forEach((z, i) => {
-    const chip = Object.assign(document.createElement("span"), { className: "chip" });
-    chip.style.background = ZONE_COLORS[z];
-    const move = (d) => { [callOrder[i], callOrder[i + d]] = [callOrder[i + d], callOrder[i]]; refresh(); };
-    const left = Object.assign(document.createElement("button"), { className: "small", textContent: "◀", disabled: i === 0 || phase !== "plan" });
-    const right = Object.assign(document.createElement("button"), { className: "small", textContent: "▶", disabled: i === callOrder.length - 1 || phase !== "plan" });
-    left.onclick = () => move(-1);
-    right.onclick = () => move(1);
-    chip.append(left, `Zone ${z + 1}`, right);
-    bar.appendChild(chip);
-  });
-}
-
-function renderBrushes() {
-  const bar = $("brushBar");
-  bar.innerHTML = "<span class='label'>Paint zone</span>";
-  for (let z = 0; z < plan.maxZones; z++) {
-    const b = document.createElement("button");
-    b.className = "zone" + (z === brush ? " active" : "");
-    b.style.background = ZONE_COLORS[z];
-    b.textContent = z + 1;
-    b.onclick = () => { brush = z; renderBrushes(); };
-    bar.appendChild(b);
-  }
-  bar.append(Object.assign(document.createElement("span"), { className: "label",
-    textContent: ` Drag across seats. Up to ${plan.maxZones} zones on this plane.` }));
+  const buy = el("button", { className: "upgrade", textContent: `Auto-call zones: $${AUTO_CALL_COST}`, disabled: save.money < AUTO_CALL_COST });
+  buy.onclick = () => { save.money -= AUTO_CALL_COST; save.autoCall = true; autoOn = save.autoOn = true; persist(); refresh(); };
+  box.append(buy, el("div", { className: "proto", textContent: "Calls the next zone as soon as the lounge line clears." }));
 }
 
 $("plane").innerHTML = Object.entries(PLANES).map(([k, p]) => `<option value="${k}">${p.name}</option>`).join("");
@@ -221,7 +235,6 @@ $("plane").onchange = () => setPlane($("plane").value);
 $("go").onclick = () => { start(); refresh(); };
 $("retry").onclick = reset;
 $("new").onclick = () => { seed++; reset(); };
-
 // --- painting ------------------------------------------------------------------
 function seatAt(pt) {
   const half = geo.cell * 0.45;
@@ -238,7 +251,7 @@ function canvasPoint(e) {
 function paint(s) {
   if (plan.zoneOfSeat[s] === paintZone) return;
   plan.paint(s, paintZone);
-  sim = new BoardingSim(layout, plan, seed); // the sim reads zones at construction
+  sim = makeSim(); // the sim reads zones at construction
   snapTo(true);
   refresh();
 }

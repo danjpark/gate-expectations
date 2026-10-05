@@ -163,6 +163,31 @@ test("seat refinement never makes the training mean worse", () => {
   assert.ok(r.trainMean <= meanTicks(l, start, train));
 });
 
+test("mood sours slower on bigger planes and for more patient passengers", () => {
+  const mood = (moodTicks, patience) => {
+    const p = generateManifest(new PlaneLayout(), 1)[0];
+    Object.assign(p, { moodTicks, patience, gateWait: 30, blocked: 5, seatedWait: 20 });
+    return p.mood();
+  };
+  assert.ok(mood(300, 3) > mood(45, 3));
+  assert.ok(mood(45, 5) > mood(45, 1));
+  assert.ok(mood(1, 1) >= 0 && mood(1000, 5) <= 100);
+});
+
+test("a good plan leaves passengers mostly content, a sloppy one visibly less so", () => {
+  const l = new PlaneLayout(32, [3, 3]);
+  const avg = (z) => {
+    const plan = new BoardingPlan(l, 9);
+    plan.zoneOfSeat = z;
+    const sim = new BoardingSim(l, plan, 1, { moodTicks: 300 });
+    sim.runAuto(1);
+    return sim.averageMood();
+  };
+  const good = avg(evenPattern(l, 90, 4)), sloppy = avg(Array(l.seatCount).fill(0));
+  assert.ok(good > 60, `good=${good}`);
+  assert.ok(sloppy < good, `sloppy=${sloppy} good=${good}`);
+});
+
 test("summarize reports mean and percentiles", () => {
   const s = summarize([1, 2, 3, 4]);
   assert.equal(s.mean, 2.5);

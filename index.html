@@ -5,46 +5,100 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gate Expectations</title>
 <style>
-  :root { color-scheme: dark; }
+  :root { color-scheme: dark; --panel: #232a3b; --edge: #38415a; --muted: #a9b2cc; }
   body { margin: 0; background: #1b1f2a; color: #eef; font: 15px system-ui, sans-serif; }
   main { max-width: 1112px; margin: 0 auto; padding: 16px; }
-  h1 { margin: 0 0 4px; font-size: 22px; }
-  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; min-height: 36px; }
-  .label { color: #a9b2cc; margin-right: 2px; }
-  button, select { font: inherit; }
-  button { background: #2f6fb3; color: #fff; border: 0; border-radius: 6px; padding: 7px 12px; cursor: pointer; }
-  button:disabled { background: #3a4050; color: #8a90a0; cursor: default; }
-  button.zone { border: 2px solid transparent; color: #111; font-weight: 600; }
-  button.zone.active { border-color: #fff; }
-  button.zone:disabled { opacity: 0.35; }
-  button.small { padding: 2px 7px; background: #3a4258; }
-  select { padding: 6px; background: #252b3a; color: #eef; border: 1px solid #3a4258; border-radius: 6px; }
-  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px; border-radius: 6px; color: #111; font-weight: 600; }
-  #money { margin-left: auto; font-weight: 600; }
-  #status { min-height: 1.4em; margin: 4px 0; }
-  a { color: #8ec1ff; }
+  h1 { margin: 0 0 8px; font-size: 22px; }
+  h2 { margin: 0 0 10px; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  h2 small { text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 6px; }
+  #status { min-height: 1.4em; margin: 0 0 8px; }
   canvas { width: 100%; height: auto; background: #252b3a; border-radius: 8px; touch-action: none; display: block; }
+  [hidden] { display: none !important; }
+  button, select { font: inherit; }
+  button { border: 0; border-radius: 6px; padding: 7px 12px; cursor: pointer; color: #fff; background: #3a4258; }
+  button:disabled { opacity: 0.4; cursor: default; }
+
+  /* Controls: zones | flight | (upgrades over settings) */
+  .panels { display: grid; grid-template-columns: minmax(300px, 1.3fr) minmax(170px, 0.7fr) minmax(250px, 0.9fr); gap: 12px; margin-top: 12px; align-items: stretch; }
+  .panel { background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; padding: 12px 14px; }
+  .side { display: flex; flex-direction: column; justify-content: space-between; gap: 12px; }
+  .panel.upgrades { border-style: dashed; background: transparent; }
+  .panel.settings { padding-bottom: 10px; }
+
+  /* Zones: one row per zone with its Paint and Call buttons */
+  .zone-row { display: grid; grid-template-columns: 22px 1fr auto auto; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .swatch { width: 18px; height: 18px; border-radius: 5px; }
+  .zone-name { font-weight: 600; }
+  .zone-count { color: var(--muted); font-weight: 400; margin-left: 6px; font-size: 13px; }
+  button.paint { background: transparent; border: 2px solid var(--edge); min-width: 70px; }
+  button.paint.active { border-color: #fff; background: #3a4258; font-weight: 600; }
+  button.call { color: #111; font-weight: 700; min-width: 96px; padding: 9px 14px; }
+  .zone-head { display: grid; grid-template-columns: 22px 1fr auto auto; gap: 8px; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+  .zone-head span:nth-child(3) { min-width: 70px; text-align: center; }
+  .zone-head span:nth-child(4) { min-width: 96px; text-align: center; }
+  .hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+  .order { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px; border-radius: 6px; color: #111; font-weight: 600; }
+  button.tiny { padding: 1px 6px; background: rgba(0,0,0,0.25); }
+  .calling { display: flex; gap: 14px; margin-bottom: 10px; color: var(--muted); font-size: 14px; }
+
+  /* Flight */
+  .flight { display: flex; flex-direction: column; gap: 8px; }
+  button.go { background: #2e9e5b; font-weight: 700; font-size: 17px; padding: 12px; }
+  button.new { background: #2f6fb3; font-weight: 600; padding: 10px; }
+  button.retry { background: transparent; border: 1px solid var(--edge); color: var(--muted); }
+
+  /* Upgrades */
+  #money { font-size: 22px; font-weight: 700; }
+  .proto { color: var(--muted); font-size: 12px; }
+  button.upgrade { background: #3a4258; margin-top: 8px; width: 100%; }
+
+  /* Settings */
+  .settings label { display: grid; grid-template-columns: 60px 1fr; align-items: center; gap: 8px; margin-bottom: 8px; color: var(--muted); }
+  select { padding: 6px; background: #1b1f2a; color: #eef; border: 1px solid var(--edge); border-radius: 6px; width: 100%; }
+  a { color: #8ec1ff; }
+
+  @media (max-width: 820px) { .panels { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
 <main>
   <h1>Gate Expectations</h1>
-  <div class="bar">
-    <span class="label">Plane</span><select id="plane"></select>
-    <span class="label">Speed</span><select id="speed"><option value="1">1×</option><option value="2">2×</option><option value="5">5×</option><option value="10">10×</option></select>
-    <a id="analyze" href="stats.html" target="_blank">Analyze this plan &rarr;</a>
-    <span id="money"></span>
-  </div>
-  <div class="bar" id="brushBar"></div>
-  <div class="bar">
-    <button id="go">Go</button>
-    <button id="retry">Retry (same passengers)</button>
-    <button id="new">New flight</button>
-    <span id="callBar"></span>
-  </div>
-  <div class="bar" id="autoBar"></div>
   <div id="status"></div>
   <canvas id="c" width="1080" height="470"></canvas>
+
+  <div class="panels">
+    <section class="panel">
+      <h2>Zones</h2>
+      <div id="calling" class="calling" hidden></div>
+      <div class="zone-head"><span></span><span></span><span>Paint seats</span><span id="callHead">Call to gate</span></div>
+      <div id="zoneRows"></div>
+      <div id="order" class="order"></div>
+      <p id="zoneHint" class="hint"></p>
+    </section>
+
+    <section class="panel flight">
+      <h2>Flight</h2>
+      <button id="go" class="go">Go</button>
+      <button id="new" class="new">New flight</button>
+      <button id="retry" class="retry">Retry (same passengers)</button>
+    </section>
+
+    <div class="side">
+      <section class="panel upgrades">
+        <h2>Upgrades <small>prototype economy</small></h2>
+        <div id="money"></div>
+        <div class="proto">Placeholder numbers, not final.</div>
+        <div id="upgradeBox"></div>
+      </section>
+      <section class="panel settings">
+        <h2>Settings</h2>
+        <label>Plane <select id="plane"></select></label>
+        <label>Speed <select id="speed"><option value="1">1×</option><option value="2">2×</option><option value="5">5×</option><option value="10">10×</option></select></label>
+        <a id="analyze" href="stats.html" target="_blank">Analyze this plan &rarr;</a>
+      </section>
+    </div>
+  </div>
 </main>
 <script type="module" src="src/main.js"></script>
 </body>

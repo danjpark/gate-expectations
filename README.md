@@ -12,6 +12,9 @@ The simulation is kept separate from the drawing so it can be ported to Godot 4 
 Planes (`PLANES` in `src/sim/layout.js`): Tier 1 (24 seats, 2 zones), Tier 2 (48), single-aisle
 737-style (32 rows, 3-3, 192 seats), wide-body (32 rows, 3-4-3 or 3-3-3, two aisles, one door).
 
+- Controls sit under the canvas: a Zones panel (one row per zone with Paint and Call buttons), Flight
+  (Go in auto mode, New flight, Retry), Upgrades and money kept apart in their own box, and Settings
+  (plane, speed, analyze link) bottom right.
 - Paint up to the plane's zone limit; call zones by hand in any order (the first call starts the flight).
 - First upgrade: auto-call zones (cheap). Calls the next zone in your chosen order once the lounge line clears.
   Placeholder economy: $10 per finished flight, +$10 on time, upgrade costs $30. Saved in the browser.
