@@ -21,7 +21,7 @@ let planeKey, layout, plan, sim, geo, phase;
 let seed = 1, acc = 0, last = 0, now = 0;
 let brush = 1, paintZone = 1, painting = false, mouse = null;
 let from = [], t0 = 0;
-let callOrder = [], lastEarned = 0;
+let callOrder = [], lastEarned = 0, lineSignature = "";
 const save = loadSave();
 let autoOn = !!save.autoOn;
 
@@ -117,6 +117,7 @@ function makeSim() {
 function reset() {
   sim = makeSim();
   phase = "plan";
+  painting = false;
   acc = 0;
   lastEarned = 0;
   snapTo(true);
@@ -126,6 +127,8 @@ function start() {
   sim = makeSim();
   snapTo(true);
   phase = "running";
+  painting = false;
+  acc = 0;
 }
 function finish() {
   phase = "done";
@@ -214,8 +217,8 @@ function renderZones(auto, planning) {
     });
   }
   $("zoneHint").textContent = auto
-    ? "Drag across seats to paint, then press Go. Zones are called in the order above."
-    : `Pick a zone's Paint button, then drag across seats (up to ${plan.maxZones} zones here). Call zones in any order; the first call starts boarding.`;
+    ? "Drag across seats to paint, then press Go. Auto-call waits for the lounge line to clear, preserving the order above."
+    : `Pick a zone's Paint button, then drag across seats (up to ${plan.maxZones} zones here). Call zones in any order; the first call starts boarding. Calling before the lounge line clears mixes zones.`;
 }
 
 function renderUpgrade() {
@@ -225,9 +228,9 @@ function renderUpgrade() {
     box.append(el("div", { className: "proto", textContent: "✓ Auto-call zones (owned)" }));
     return;
   }
-  const buy = el("button", { className: "upgrade", textContent: `Auto-call zones: $${AUTO_CALL_COST}`, disabled: save.money < AUTO_CALL_COST });
+  const buy = el("button", { className: "upgrade", textContent: `Auto-call zones: $${AUTO_CALL_COST}`, disabled: save.money < AUTO_CALL_COST || phase !== "plan" });
   buy.onclick = () => { save.money -= AUTO_CALL_COST; save.autoCall = true; autoOn = save.autoOn = true; persist(); refresh(); };
-  box.append(buy, el("div", { className: "proto", textContent: "Calls the next zone as soon as the lounge line clears." }));
+  box.append(buy, el("div", { className: "proto", textContent: "Waits for the lounge line to clear, preserving your zone order." }));
 }
 
 $("plane").innerHTML = Object.entries(PLANES).map(([k, p]) => `<option value="${k}">${p.name}</option>`).join("");
@@ -268,7 +271,7 @@ canvas.addEventListener("pointerdown", (e) => {
 canvas.addEventListener("pointermove", (e) => {
   const prev = mouse;
   mouse = canvasPoint(e);
-  if (!painting) return;
+  if (!painting || phase !== "plan") return;
   // Sample along the drag so fast moves don't skip seats.
   const steps = prev ? Math.ceil(Math.hypot(mouse.x - prev.x, mouse.y - prev.y) / (geo.cell / 3)) : 0;
   for (let i = 0; i <= steps; i++) {
@@ -277,6 +280,8 @@ canvas.addEventListener("pointermove", (e) => {
   }
 });
 canvas.addEventListener("pointerup", () => { painting = false; });
+canvas.addEventListener("pointercancel", () => { painting = false; });
+canvas.addEventListener("lostpointercapture", () => { painting = false; });
 canvas.addEventListener("pointerleave", () => { mouse = null; });
 
 // --- loop ----------------------------------------------------------------------
@@ -291,8 +296,8 @@ function frame(t) {
     while (acc >= tickMs() && !sim.done && guard++ < 50) {
       acc -= tickMs();
       snapTo(false);
-      if (save.autoCall && autoOn) sim.autoCall(callOrder);
       const before = sim.zonesReleased;
+      if (save.autoCall && autoOn) sim.autoCall(callOrder);
       sim.step();
       if (sim.zonesReleased !== before) refresh();
     }
@@ -300,7 +305,42 @@ function frame(t) {
     if (sim.done) finish();
   }
   draw();
+  renderLineTiming();
   requestAnimationFrame(frame);
+}
+
+// Compact view of the actual queue, in admission order, with no simulation writes.
+function renderLineTiming() {
+  const queue = sim.gateQueue;
+  const preview = queue.slice(0, 12).map((p) => p.zone);
+  const signature = [phase, queue.length, sim.lineMixed, sim.canRelease, sim.overlapCalls, ...preview].join(",");
+  if (signature === lineSignature) return;
+  lineSignature = signature;
+  const panel = $("gateLine");
+  panel.classList.toggle("mixed", phase === "running" && sim.lineMixed);
+  panel.classList.toggle("ready", phase === "running" && queue.length === 0 && sim.canRelease);
+  $("lineCount").textContent = `Lounge line: ${queue.length}`;
+  const strip = $("linePreview");
+  strip.innerHTML = "";
+  strip.setAttribute("aria-label", preview.length
+    ? `Next at door: ${preview.map((z) => `zone ${z + 1}`).join(", ")}` : "Lounge line empty");
+  preview.forEach((z) => {
+    const dot = el("span", { className: "line-dot", title: `Zone ${z + 1}` });
+    dot.style.background = ZONE_COLORS[z];
+    strip.append(dot);
+  });
+  if (queue.length > preview.length) strip.append(el("span", { className: "proto", textContent: `+${queue.length - preview.length}` }));
+  $("lineHint").textContent = phase === "plan"
+    ? "Call next when the lounge line clears. Early calls mix zones; waiting too long leaves the entrance idle."
+    : phase === "done"
+      ? `${sim.overlapCalls} overlapping ${sim.overlapCalls === 1 ? "call" : "calls"} this flight.`
+      : sim.lineMixed
+        ? "Mixed line — an overlapping call let another zone slip ahead."
+        : queue.length === 0 && sim.canRelease
+          ? "Line clear — call the next zone now."
+          : queue.length > 0
+            ? "Line moving — calling another zone too early can mix the order."
+            : "All zones called — boarding continues.";
 }
 
 function draw() {

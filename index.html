@@ -18,6 +18,15 @@
   button { border: 0; border-radius: 6px; padding: 7px 12px; cursor: pointer; color: #fff; background: #3a4258; }
   button:disabled { opacity: 0.4; cursor: default; }
 
+  .gate-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; padding: 8px 10px; border: 1px solid var(--edge); border-radius: 6px; background: var(--panel); font-size: 13px; }
+  .gate-line.mixed { border-color: #e9aa60; }
+  .gate-line.mixed .line-hint { color: #ffd099; }
+  .gate-line.ready { border-color: #7fd17f; }
+  .gate-line.ready .line-hint { color: #9fe39f; }
+  .line-preview { display: inline-flex; align-items: center; gap: 4px; }
+  .line-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+  .line-hint { color: var(--muted); }
+
   /* Controls: zones | flight | (upgrades over settings) */
   .panels { display: grid; grid-template-columns: minmax(300px, 1.3fr) minmax(170px, 0.7fr) minmax(250px, 0.9fr); gap: 12px; margin-top: 12px; align-items: stretch; }
   .panel { background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; padding: 12px 14px; }
@@ -66,6 +75,11 @@
   <h1>Gate Expectations</h1>
   <div id="status"></div>
   <canvas id="c" width="1080" height="470"></canvas>
+  <div id="gateLine" class="gate-line">
+    <span id="lineCount"></span>
+    <span class="proto">Next at door →</span><span id="linePreview" class="line-preview" role="img"></span>
+    <span id="lineHint" class="line-hint"></span>
+  </div>
 
   <div class="panels">
     <section class="panel">
