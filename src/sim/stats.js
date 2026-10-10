@@ -4,8 +4,9 @@ import { BoardingPlan } from "./plan.js";
 import { BoardingSim } from "./boarding.js";
 
 export const DNF_TICKS = 20000;
-// Zones are called back-to-back: release timing has no cost in the current sim, so earliest is best.
-export const STATS_GAP = 1;
+// Default analysis matches the upgrade: wait until the lounge line clears.
+// An integer gap explicitly tests fixed call timing (0 calls only the first zone).
+export const STATS_GAP = null;
 
 export const seedRange = (from, count) => Array.from({ length: count }, (_, i) => from + i);
 
@@ -15,7 +16,8 @@ export function runBatch(layout, zoneOfSeat, seeds, gap = STATS_GAP) {
   const plan = new BoardingPlan(layout, Infinity);
   plan.zoneOfSeat = zoneOfSeat.slice();
   return seeds.map((seed) => {
-    const t = new BoardingSim(layout, plan, seed).runAuto(gap, DNF_TICKS);
+    const sim = new BoardingSim(layout, plan, seed);
+    const t = gap === null ? sim.runAutoCall(DNF_TICKS) : sim.runAuto(gap, DNF_TICKS);
     return t < 0 ? DNF_TICKS : t;
   });
 }

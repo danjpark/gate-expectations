@@ -34,6 +34,7 @@ export class BoardingSim {
     this.seatTaken = new Array(layout.seatCount).fill(false);
     this.reseating = [];             // { lane, cell, ids, timer }
     this.gateQueue = [];
+    this.overlapCalls = 0; // calls that allowed newcomers to pass waiting passengers
     this.released = new Array(plan.zoneCount).fill(false);
     this.tick = 0;
     this.seatedCount = 0;
@@ -43,12 +44,37 @@ export class BoardingSim {
   get zoneCount() { return this.released.length; }
   get zonesReleased() { return this.released.filter(Boolean).length; }
   get canRelease() { return this.released.includes(false); }
+  get lineMixed() {
+    const seen = new Set();
+    let previous = -1;
+    for (const p of this.gateQueue) {
+      if (p.zone !== previous && seen.has(p.zone)) return true;
+      seen.add(p.zone);
+      previous = p.zone;
+    }
+    return false;
+  }
   isReleased(zone) { return this.released[zone]; }
 
+  // Calling into an occupied lounge line mixes the new zone into the old one.
+  // Placeholder rule: preserve each group's internal order, alternating old/new passengers.
+  // The person already at the front keeps their place; later arrivals can slip past the rest.
+  // No random draws: the same call trace produces the same queue and boarding result.
+  // A call after the lounge line clears preserves the planned zone order.
   // Call one zone to the door. Zones can be called in any order, each once.
   releaseZone(zone) {
-    if (zone < 0 || zone >= this.zoneCount || this.released[zone]) return;
-    for (const p of this.passengers) if (p.zone === zone) this.gateQueue.push(p);
+    if (!Number.isInteger(zone) || zone < 0 || zone >= this.zoneCount || this.released[zone]) return;
+    const arrivals = this.passengers.filter((p) => p.zone === zone);
+    if (arrivals.length && this.gateQueue.length > 1) {
+      const waiting = this.gateQueue;
+      const mixed = [];
+      for (let i = 0; i < Math.max(waiting.length, arrivals.length); i++) {
+        if (i < waiting.length) mixed.push(waiting[i]);
+        if (i < arrivals.length) mixed.push(arrivals[i]);
+      }
+      this.gateQueue = mixed;
+      this.overlapCalls++;
+    } else this.gateQueue.push(...arrivals);
     this.released[zone] = true;
   }
   // Call the first not-yet-called zone in `order` (defaults to 1, 2, 3...).
@@ -161,12 +187,21 @@ export class BoardingSim {
     this.seatedCount++;
   }
 
+  // Headless equivalent of the game's upgrade: check the lounge line before each step.
+  runAutoCall(maxTicks = 20000, order = this.defaultOrder()) {
+    while (!this.done && this.tick < maxTicks) {
+      this.autoCall(order);
+      this.step();
+    }
+    return this.done ? this.tick : -1;
+  }
+
   // Headless helper: call a zone every `gap` ticks in `order`, run to completion.
   // Returns boarding time in ticks, or -1 if it did not finish.
   runAuto(gap, maxTicks = 20000, order = this.defaultOrder()) {
     this.releaseNextZone(order);
     while (!this.done && this.tick < maxTicks) {
-      if (gap > 0 && this.tick % gap === 0) this.releaseNextZone(order);
+      if (gap > 0 && this.tick > 0 && this.tick % gap === 0) this.releaseNextZone(order);
       this.step();
     }
     return this.done ? this.tick : -1;

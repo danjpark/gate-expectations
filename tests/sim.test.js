@@ -180,7 +180,7 @@ test("a good plan leaves passengers mostly content, a sloppy one visibly less so
     const plan = new BoardingPlan(l, 9);
     plan.zoneOfSeat = z;
     const sim = new BoardingSim(l, plan, 1, { moodTicks: 300 });
-    sim.runAuto(1);
+    sim.runAutoCall();
     return sim.averageMood();
   };
   const good = avg(evenPattern(l, 90, 4)), sloppy = avg(Array(l.seatCount).fill(0));
