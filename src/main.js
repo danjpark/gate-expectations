@@ -4,6 +4,7 @@
 import { PlaneLayout, PLANES } from "./sim/layout.js";
 import { BoardingPlan } from "./sim/plan.js";
 import { BoardingSim, WALKWAY_CELLS } from "./sim/boarding.js";
+import { buildReview } from "./sim/review.js";
 import { State } from "./sim/passenger.js";
 
 const BASE_TICK_MS = 500;
@@ -22,6 +23,7 @@ let seed = 1, acc = 0, last = 0, now = 0;
 let brush = 1, paintZone = 1, painting = false, mouse = null;
 let from = [], t0 = 0;
 let callOrder = [], lastEarned = 0, lineSignature = "";
+let previousAttempt = null, review = null;
 const save = loadSave();
 let autoOn = !!save.autoOn;
 
@@ -34,6 +36,7 @@ function persist() { try { localStorage.setItem("ge-save", JSON.stringify(save))
 
 // --- plane setup -------------------------------------------------------------
 function setPlane(key) {
+  previousAttempt = null;
   planeKey = key;
   const p = PLANES[key];
   layout = new PlaneLayout(p.rows, p.blocks);
@@ -120,6 +123,7 @@ function reset() {
   painting = false;
   acc = 0;
   lastEarned = 0;
+  review = null;
   snapTo(true);
   refresh();
 }
@@ -133,6 +137,7 @@ function start() {
 function finish() {
   phase = "done";
   lastEarned = PAY_FINISH + (sim.tick <= PLANES[planeKey].target ? PAY_ON_TIME : 0);
+  review = buildReview(sim, { target: PLANES[planeKey].target, money: lastEarned, previous: previousAttempt });
   save.money += lastEarned;
   persist();
   refresh();
@@ -160,6 +165,30 @@ function refresh() {
   $("analyze").href = `stats.html#p=${planeKey}&z=${plan.zoneOfSeat.join("")}`;
   renderZones(auto, planning);
   renderUpgrade();
+  renderReview();
+}
+
+function renderReview() {
+  $("review").hidden = !review;
+  if (!review) return;
+  $("reviewSummary").textContent = `${review.onTime ? "On time" : "Late"}: ${review.ticks} / ${review.target} ticks · Mood ${Math.round(review.mood)}/100 · Earned $${review.money}`;
+  const comparison = review.comparison;
+  $("reviewComparison").textContent = comparison
+    ? `Previous attempt: ${comparison.previous.ticks} ticks, mood ${Math.round(comparison.previous.mood)}. Change: ${comparison.ticks > 0 ? "+" : ""}${comparison.ticks} ticks, ${comparison.mood > 0 ? "+" : ""}${Math.round(comparison.mood)} mood.` : "";
+  const jam = review.worstJam;
+  $("worstJam").textContent = jam ? `Worst jam: ${jam.name} stuck at ${jam.location} for ${jam.ticks} consecutive ticks.` : "No recorded jam. A rare airport miracle.";
+  $("reviewDisruption").textContent = review.meltdown ? `${review.meltdown.name} had a moment: +${review.meltdown.penalty} ticks. Mood was paused during it.` : "";
+  for (const category of ["complaints", "compliments"]) {
+    const list = $(category); list.innerHTML = "";
+    for (const comment of review[category]) list.append(el("li", {}, `${comment.name}: “${comment.text}” `, el("small", { className: "proto", textContent: `(${comment.evidence})` })));
+    if (!review[category].length) list.append(el("li", { className: "hint", textContent: "No comments triggered." }));
+  }
+}
+
+function renderDisruption() {
+  const active = phase === "running" && sim.meltdownRemaining > 0;
+  $("disruption").hidden = !active;
+  if (active) $("disruption").textContent = `${sim.passengers[sim.meltdown.passengerId].name} is having a moment. Boarding resumes in ${sim.meltdownRemaining} ticks.`;
 }
 
 // One row per zone: swatch, name, Paint (choose the brush) and Call (send that zone to the gate).
@@ -236,8 +265,11 @@ function renderUpgrade() {
 $("plane").innerHTML = Object.entries(PLANES).map(([k, p]) => `<option value="${k}">${p.name}</option>`).join("");
 $("plane").onchange = () => setPlane($("plane").value);
 $("go").onclick = () => { start(); refresh(); };
-$("retry").onclick = reset;
-$("new").onclick = () => { seed++; reset(); };
+$("retry").onclick = () => {
+  if (review) previousAttempt = { ticks: review.ticks, mood: review.mood };
+  reset();
+};
+$("new").onclick = () => { previousAttempt = null; seed++; reset(); };
 // --- painting ------------------------------------------------------------------
 function seatAt(pt) {
   const half = geo.cell * 0.45;
@@ -306,6 +338,7 @@ function frame(t) {
   }
   draw();
   renderLineTiming();
+  renderDisruption();
   requestAnimationFrame(frame);
 }
 
@@ -383,6 +416,11 @@ function draw() {
     ctx.fill();
     ctx.beginPath(); ctx.arc(pos.x, pos.y, geo.rInner, 0, Math.PI * 2);
     ctx.fillStyle = ZONE_COLORS[p.zone]; ctx.fill();
+    if (sim.meltdownRemaining > 0 && sim.meltdown.passengerId === p.id) {
+      ctx.beginPath(); ctx.arc(pos.x, pos.y, geo.rOuter + 4, 0, Math.PI * 2);
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 3; ctx.stroke(); ctx.lineWidth = 1;
+      ctx.fillStyle = "#fff"; ctx.fillText("!", pos.x - 2, pos.y - geo.rOuter - 7);
+    }
     if (p.state === State.STANDING) { ctx.strokeStyle = "#111"; ctx.lineWidth = 2; ctx.stroke(); ctx.lineWidth = 1; }
     if (mouse && Math.hypot(mouse.x - pos.x, mouse.y - pos.y) < Math.max(geo.rOuter, 6)) hover = p;
   }

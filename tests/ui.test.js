@@ -55,7 +55,12 @@ test("timing UI shows mixed admission order, clear-line cue, and a working auto-
     for(let i=0;i<200&&!$("status").textContent.includes("Earned");i++)frame();
     assert.ok($("status").textContent.includes("Earned"));
     assert.ok($("lineHint").textContent.includes("1 overlapping call"));
+    assert.equal($("review").hidden, false);
+    assert.ok($("reviewSummary").textContent.includes("Mood"));
+    assert.ok($("worstJam").textContent.includes("Worst jam"));
+    assert.ok($("complaints").children.length <= 3);
     $("retry").onclick();frame();
+    assert.equal($("review").hidden, true);
     assert.ok($("lineHint").textContent.includes("Call next"));
     calls()[0].onclick();
     for(let i=0;i<200&&!$("lineHint").textContent.includes("Line clear");i++)frame();
@@ -64,6 +69,7 @@ test("timing UI shows mixed admission order, clear-line cue, and a working auto-
     calls()[1].onclick();
     for(let i=0;i<200&&!$("status").textContent.includes("Earned");i++)frame();
     assert.ok($("status").textContent.includes("Earned"));
+    assert.ok($("reviewComparison").textContent.includes("Previous attempt"));
     $("retry").onclick();
     $("upgradeBox").children[0].onclick();
     assert.equal(JSON.parse(stored).autoCall,true);
@@ -72,6 +78,9 @@ test("timing UI shows mixed admission order, clear-line cue, and a working auto-
     for(let i=0;i<200&&!$("status").textContent.includes("Earned");i++)frame();
     assert.ok($("status").textContent.includes("Earned"));
     assert.ok($("lineHint").textContent.includes("0 overlapping calls"));
+    $("new").onclick(); frame(); calls()[0].onclick(); calls()[1].onclick();
+    for(let i=0;i<200&&!$("status").textContent.includes("Earned");i++)frame();
+    assert.equal($("reviewComparison").textContent, "");
   } finally {
     for(const [key,value] of Object.entries(originals)) {
       if(value===undefined)delete globalThis[key];else globalThis[key]=value;

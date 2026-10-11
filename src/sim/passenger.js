@@ -26,8 +26,9 @@ export class Passenger {
     this.blocked = 0;
     this.seatedWait = 0;
     this.seatedTick = -1;
+    this.jam = null; // current consecutive blockage; updated by the sim
   }
-  // 0..100, lower is unhappier. Placeholder weights; never feeds back into the sim.
+  // 0..100, lower is unhappier. Placeholder weights; can trigger one bounded disruption per flight.
   // Scales with the plane (`moodTicks`, roughly a good boarding time) so a 300-tick flight isn't
   // sourer than a 40-tick one; patience 1..5 gives 1.5x..3.5x that much tolerance.
   mood() {

@@ -28,6 +28,13 @@ Planes (`PLANES` in `src/sim/layout.js`): Tier 1 (24 seats, 2 zones), Tier 2 (48
   Placeholder economy: $10 per finished flight, +$10 on time, upgrade costs $30. Saved in the browser.
 - Seat shuffle: seated neighbours between you and your seat step into the aisle (blocking two cells),
   you sit, then they step back and sit down again.
+- **Phase 2: post-flight review.** Separate time/target, average mood and money; up to three
+  evidence-based complaints and compliments, the single longest consecutive blockage (passenger,
+  location and ticks), and previous-attempt time/mood after Retry. New flight or plane clears comparison.
+  Wording varies deterministically; no runtime language model and no combined score.
+- Mood below 20 triggers at most one meltdown per flight: a visible ring/message and four fixed
+  pause ticks. Experience counters freeze during the pause, so its penalty cannot cause a mood cascade.
+  Thresholds, limits and penalties are placeholders. Failure and money remain time-only.
 - Hover name cards; one trait (patience) feeding mood.
 
 ## Run
@@ -78,5 +85,11 @@ calls versus 78.64 with auto-call; auto-call was faster on all 50 seeds. For see
 were 109 ticks, auto-call 80, and waiting until tick 120 for the second zone 168. These results are
 specific to that plan and seed set, not a guarantee that every overlapping call hurts every plan.
 
-Existing browser saves keep the same shape. Phase 2 review/scoring, disruptions, interventions,
-progression, luggage, doors, staff and engine work are not part of Phase 1.
+Existing browser saves keep the same shape in Phases 1–2. Progression, luggage, doors and engine work remain deferred.
+
+## Phase 2 playtest
+
+Finish a flight, check whether the comments and worst jam match what you watched, then Retry and
+compare time and mood. Delay a zone long enough to sour a passenger below 20: boarding pauses once
+for four ticks, with a highlighted passenger. No further meltdowns occur that flight. Reviews and
+disruption visibility await local visual playtesting. Phase 1 benchmarks above predate Phase 2.

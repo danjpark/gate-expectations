@@ -27,6 +27,13 @@
   .line-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
   .line-hint { color: var(--muted); }
 
+  .review { margin-top: 12px; }
+  .review-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .review ul { padding-left: 18px; margin: 6px 0; }
+  .review li { margin-bottom: 8px; }
+  .disruption { margin-top: 8px; color: #ffd099; }
+  @media (max-width: 650px) { .review-columns { grid-template-columns: 1fr; } }
+
   /* Controls: zones | flight | (upgrades over settings) */
   .panels { display: grid; grid-template-columns: minmax(300px, 1.3fr) minmax(170px, 0.7fr) minmax(250px, 0.9fr); gap: 12px; margin-top: 12px; align-items: stretch; }
   .panel { background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; padding: 12px 14px; }
@@ -80,6 +87,20 @@
     <span class="proto">Next at door →</span><span id="linePreview" class="line-preview" role="img"></span>
     <span id="lineHint" class="line-hint"></span>
   </div>
+
+  <div id="disruption" class="gate-line disruption" role="status" hidden></div>
+  <section id="review" class="panel review" hidden>
+    <h2>Flight review <small>time and mood scored separately</small></h2>
+    <div id="reviewSummary"></div>
+    <p id="reviewComparison" class="hint"></p>
+    <p id="worstJam" class="hint"></p>
+    <p id="reviewDisruption" class="hint"></p>
+    <div class="review-columns">
+      <div><h2>Complaints</h2><ul id="complaints"></ul></div>
+      <div><h2>Compliments</h2><ul id="compliments"></ul></div>
+    </div>
+    <p class="proto">Review thresholds and disruption timing are placeholders. Money still depends on time only.</p>
+  </section>
 
   <div class="panels">
     <section class="panel">
