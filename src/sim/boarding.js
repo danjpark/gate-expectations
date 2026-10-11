@@ -14,11 +14,17 @@ export const WALKWAY_CELLS = 4;    // placeholder: jet bridge length
 export const SEAT_TICKS = 2;       // placeholder: ticks to sit down
 export const UNSEAT_TICKS = 2;     // placeholder: ticks per neighbour to stand up and step out
 export const RESEAT_TICKS = 2;     // placeholder: ticks per neighbour to sit back down
+export const MELTDOWN_THRESHOLD = 20; // placeholders: one disruption per flight
+export const MELTDOWN_TICKS = 4;
 const HOLD = -2;                   // aisle cell taken by standing neighbours
 
 export class BoardingSim {
   // moodTicks: the boarding time passengers treat as normal (affects only how fast mood sours).
   constructor(layout, plan, seed, { moodTicks = 100 } = {}) {
+    this.seed = seed;
+    this.worstJam = null;
+    this.meltdown = null;
+    this.meltdownRemaining = 0;
     this.layout = layout;
     this.plan = plan;
     this.passengers = generateManifest(layout, seed);
@@ -92,6 +98,8 @@ export class BoardingSim {
   step() {
     if (this.done) return;
     this.tick++;
+    // This bounded pause costs time without creating more sourness or another breakdown.
+    if (this.meltdownRemaining > 0) { this.meltdownRemaining--; return; }
     this.stepReseating();
     for (let a = 0; a < this.lanes.length; a++) this.stepLane(a);
     this.stepWalkway();
@@ -104,8 +112,27 @@ export class BoardingSim {
     }
     for (const p of this.passengers) {
       if (p.state === State.AT_GATE) p.gateWait++;
-      else if (p.state === State.STANDING) p.blocked++;
+      else if (p.state === State.STANDING) this.block(p);
       else if (p.state === State.SEATED && p.seatedTick !== this.tick) p.seatedWait++;
+    }
+    if (!this.done && !this.meltdown) {
+      const p = this.passengers.find((p) => p.state !== State.SEATED && p.mood() < MELTDOWN_THRESHOLD);
+      if (p) {
+        this.meltdown = { passengerId: p.id, tick: this.tick, penalty: MELTDOWN_TICKS };
+        this.meltdownRemaining = MELTDOWN_TICKS;
+      }
+    }
+  }
+
+  // Longest uninterrupted wait at one location, measured from actual blocked ticks.
+  block(p) {
+    p.blocked++;
+    const location = { kind: p.state === State.STANDING ? "seat shuffle" : p.lane < 0 ? "jet bridge" : "aisle", lane: p.lane, cell: p.cell };
+    const same = p.jam && p.jam.lastTick === this.tick - 1 &&
+      p.jam.kind === location.kind && p.jam.lane === location.lane && p.jam.cell === location.cell;
+    p.jam = { ...location, ticks: same ? p.jam.ticks + 1 : 1, lastTick: this.tick };
+    if (!this.worstJam || p.jam.ticks > this.worstJam.ticks) {
+      this.worstJam = { passengerId: p.id, ...location, ticks: p.jam.ticks };
     }
   }
 
@@ -128,11 +155,11 @@ export class BoardingSim {
         if (lane[c + 1] === -1) {
           lane[c + 1] = p.id; lane[c] = -1; p.cell = c + 1;
           if (p.cell === p.targetCell) this.arrive(p);
-        } else p.blocked++;
+        } else this.block(p);
         continue;
       }
       if (p.phase === Phase.WAIT_FOR_SPACE) {
-        if (lane[c + 1] !== -1) { p.blocked++; continue; }
+        if (lane[c + 1] !== -1) { this.block(p); continue; }
         lane[c + 1] = HOLD;
         for (const id of p.neighbours) {
           const n = this.passengers[id];
@@ -165,10 +192,10 @@ export class BoardingSim {
       if (c === w.length - 1) {
         const a = this.layout.seatAisle(p.seat);
         if (this.lanes[a][0] === -1) { this.lanes[a][0] = p.id; w[c] = -1; p.lane = a; p.cell = 0; }
-        else p.blocked++;
+        else this.block(p);
       } else if (w[c + 1] === -1) {
         w[c + 1] = p.id; w[c] = -1; p.cell = c + 1;
-      } else p.blocked++;
+      } else this.block(p);
     }
   }
 
