@@ -3,7 +3,7 @@
 // the sim now says they are, over one tick, so movement looks smooth.
 import { PlaneLayout, PLANES } from "./sim/layout.js";
 import { BoardingPlan } from "./sim/plan.js";
-import { BoardingSim, WALKWAY_CELLS } from "./sim/boarding.js";
+import { BoardingSim, WALKWAY_CELLS, SHUFFLE_HESITATION_TICKS } from "./sim/boarding.js";
 import { buildReview } from "./sim/review.js";
 import { State } from "./sim/passenger.js";
 
@@ -12,7 +12,7 @@ const ZONE_COLORS = ["#4f9dde", "#f2a03d", "#7fd17f", "#e0645c", "#c28cf0"];
 const ROOM = { x: 16, y: 30, w: 214, h: 420 };
 const BRIDGE_X0 = ROOM.x + ROOM.w;
 // Economy placeholders (currency not decided yet): tune by playtesting.
-const PAY_FINISH = 10, PAY_ON_TIME = 10, AUTO_CALL_COST = 30;
+const PAY_FINISH = 10, PAY_ON_TIME = 10, AUTO_CALL_COST = 30, SHUFFLE_STAFF_COST = 40;
 
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
@@ -29,8 +29,8 @@ let autoOn = !!save.autoOn;
 
 // --- save (per-browser convenience; safe to lose) ---------------------------
 function loadSave() {
-  try { return { money: 0, autoCall: false, ...JSON.parse(localStorage.getItem("ge-save") || "{}") }; }
-  catch { return { money: 0, autoCall: false }; }
+  try { return { money: 0, autoCall: false, shuffleStaff: false, ...JSON.parse(localStorage.getItem("ge-save") || "{}") }; }
+  catch { return { money: 0, autoCall: false, shuffleStaff: false }; }
 }
 function persist() { try { localStorage.setItem("ge-save", JSON.stringify(save)); } catch { /* storage unavailable */ } }
 
@@ -113,7 +113,7 @@ function snapTo(instant) {
 }
 
 function makeSim() {
-  return new BoardingSim(layout, plan, seed, { moodTicks: PLANES[planeKey].target });
+  return new BoardingSim(layout, plan, seed, { moodTicks: PLANES[planeKey].target, autoAssist: save.shuffleStaff });
 }
 
 // --- flow --------------------------------------------------------------------
@@ -175,6 +175,10 @@ function renderReview() {
   const comparison = review.comparison;
   $("reviewComparison").textContent = comparison
     ? `Previous attempt: ${comparison.previous.ticks} ticks, mood ${Math.round(comparison.previous.mood)}. Change: ${comparison.ticks > 0 ? "+" : ""}${comparison.ticks} ticks, ${comparison.mood > 0 ? "+" : ""}${Math.round(comparison.mood)} mood.` : "";
+  const assist = review.assistance;
+  $("reviewAssist").textContent = !assist ? "No seat-shuffle assist needed." : assist.outcome === "ignored"
+    ? `${assist.name}'s hesitation resolved on its own after ${SHUFFLE_HESITATION_TICKS} hesitation ticks.`
+    : `${assist.outcome === "staff" ? "Boarding helper" : "You"} helped ${assist.name}: removed ${assist.savedTicks} hesitation ticks (total flight time may save less).`;
   const jam = review.worstJam;
   $("worstJam").textContent = jam ? `Worst jam: ${jam.name} stuck at ${jam.location} for ${jam.ticks} consecutive ticks.` : "No recorded jam. A rare airport miracle.";
   $("reviewDisruption").textContent = review.meltdown ? `${review.meltdown.name} had a moment: +${review.meltdown.penalty} ticks. Mood was paused during it.` : "";
@@ -189,6 +193,14 @@ function renderDisruption() {
   const active = phase === "running" && sim.meltdownRemaining > 0;
   $("disruption").hidden = !active;
   if (active) $("disruption").textContent = `${sim.passengers[sim.meltdown.passengerId].name} is having a moment. Boarding resumes in ${sim.meltdownRemaining} ticks.`;
+}
+
+function renderAssist() {
+  const event = sim.shuffleAssist;
+  const pending = phase === "running" && event?.outcome === "pending";
+  $("assistPanel").hidden = !pending;
+  $("assist").disabled = !pending || sim.meltdownRemaining > 0;
+  if (pending) $("assistHint").textContent = `${sim.passengers[event.passengerId].name} hesitates at row ${event.row + 1}, aisle ${event.lane + 1}. Help now, or it resolves in ${event.remaining} ticks.`;
 }
 
 // One row per zone: swatch, name, Paint (choose the brush) and Call (send that zone to the gate).
@@ -253,17 +265,32 @@ function renderZones(auto, planning) {
 function renderUpgrade() {
   const box = $("upgradeBox");
   box.innerHTML = "";
-  if (save.autoCall) {
-    box.append(el("div", { className: "proto", textContent: "✓ Auto-call zones (owned)" }));
-    return;
+  for (const upgrade of [
+    { key: "autoCall", name: "Auto-call zones", cost: AUTO_CALL_COST, note: "Waits for the lounge line to clear, preserving your zone order." },
+    { key: "shuffleStaff", name: "Boarding helper", cost: SHUFFLE_STAFF_COST, note: "Automatically handles the one seat-shuffle hesitation. No staff experience system yet." },
+  ]) {
+    if (save[upgrade.key]) {
+      box.append(el("div", { className: "proto", textContent: `✓ ${upgrade.name} (owned)` }));
+      continue;
+    }
+    const buy = el("button", { className: "upgrade", textContent: `${upgrade.name}: $${upgrade.cost}`, disabled: save.money < upgrade.cost || phase !== "plan" });
+    buy.onclick = () => {
+      if (phase !== "plan" || save[upgrade.key] || save.money < upgrade.cost) return;
+      save.money -= upgrade.cost;
+      save[upgrade.key] = true;
+      if (upgrade.key === "autoCall") autoOn = save.autoOn = true;
+      persist(); refresh();
+    };
+    box.append(buy, el("div", { className: "proto", textContent: upgrade.note }));
   }
-  const buy = el("button", { className: "upgrade", textContent: `Auto-call zones: $${AUTO_CALL_COST}`, disabled: save.money < AUTO_CALL_COST || phase !== "plan" });
-  buy.onclick = () => { save.money -= AUTO_CALL_COST; save.autoCall = true; autoOn = save.autoOn = true; persist(); refresh(); };
-  box.append(buy, el("div", { className: "proto", textContent: "Waits for the lounge line to clear, preserving your zone order." }));
 }
 
 $("plane").innerHTML = Object.entries(PLANES).map(([k, p]) => `<option value="${k}">${p.name}</option>`).join("");
 $("plane").onchange = () => setPlane($("plane").value);
+$("assist").onclick = () => {
+  if (phase === "running") sim.assistShuffle(sim.shuffleAssist?.passengerId);
+  renderAssist();
+};
 $("go").onclick = () => { start(); refresh(); };
 $("retry").onclick = () => {
   if (review) previousAttempt = { ticks: review.ticks, mood: review.mood };
@@ -339,6 +366,7 @@ function frame(t) {
   draw();
   renderLineTiming();
   renderDisruption();
+  renderAssist();
   requestAnimationFrame(frame);
 }
 
@@ -416,6 +444,10 @@ function draw() {
     ctx.fill();
     ctx.beginPath(); ctx.arc(pos.x, pos.y, geo.rInner, 0, Math.PI * 2);
     ctx.fillStyle = ZONE_COLORS[p.zone]; ctx.fill();
+    if (sim.shuffleAssist?.outcome === "pending" && sim.shuffleAssist.passengerId === p.id) {
+      ctx.beginPath(); ctx.arc(pos.x, pos.y, geo.rOuter + 4, 0, Math.PI * 2);
+      ctx.strokeStyle = "#ffd099"; ctx.lineWidth = 3; ctx.stroke(); ctx.lineWidth = 1;
+    }
     if (sim.meltdownRemaining > 0 && sim.meltdown.passengerId === p.id) {
       ctx.beginPath(); ctx.arc(pos.x, pos.y, geo.rOuter + 4, 0, Math.PI * 2);
       ctx.strokeStyle = "#fff"; ctx.lineWidth = 3; ctx.stroke(); ctx.lineWidth = 1;

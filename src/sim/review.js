@@ -1,3 +1,5 @@
+import { State } from "./passenger.js";
+
 // Pure, read-only review. Thresholds and wording are placeholders for playtesting.
 // Wording cycles deterministically from flight seed/passenger/category; it consumes no RNG.
 const PHRASES = {
@@ -27,9 +29,9 @@ export function buildReview(sim, { target, money = 0, previous = null } = {}) {
     if (p.blocked >= Math.max(6, tolerance * 0.15)) add(complaints, p, "blocked", 2 * p.blocked / tolerance, `${p.blocked} blocked ticks`);
     if (p.seatedWait >= Math.max(12, tolerance * 0.35)) add(complaints, p, "seated", p.seatedWait / tolerance, `${p.seatedWait} ticks after sitting`);
     if (sim.meltdown?.passengerId === p.id) add(complaints, p, "meltdown", 2, `${sim.meltdown.penalty} disruption ticks`);
-    if (p.state === 2 && p.blocked === 0 && p.gateWait <= p.moodTicks * 0.25) add(compliments, p, "clean", 1, "No blockage; short gate wait");
+    if (p.state === State.SEATED && p.blocked === 0 && p.gateWait <= p.moodTicks * 0.25) add(compliments, p, "clean", 1, "No blockage; short gate wait");
     if (sim.done && sim.tick <= target && p.mood() >= 60) add(compliments, p, "quick", 0.8, `${sim.tick} ticks; target ${target}`);
-    if (p.state === 2 && p.mood() >= 80) add(compliments, p, "calm", p.mood() / 100, `Mood ${p.mood()}/100`);
+    if (p.state === State.SEATED && p.mood() >= 80) add(compliments, p, "calm", p.mood() / 100, `Mood ${p.mood()}/100`);
   }
   // One comment per category and passenger, at most three. No invented filler.
   const select = (items) => {
@@ -48,6 +50,7 @@ export function buildReview(sim, { target, money = 0, previous = null } = {}) {
     complaints: select(complaints), compliments: select(compliments),
     worstJam: sim.worstJam ? { ...sim.worstJam, name: sim.passengers[sim.worstJam.passengerId].name, location: jamLocation(sim.worstJam) } : null,
     meltdown: sim.meltdown ? { ...sim.meltdown, name: sim.passengers[sim.meltdown.passengerId].name } : null,
+    assistance: sim.shuffleAssist ? { ...sim.shuffleAssist, name: sim.passengers[sim.shuffleAssist.passengerId].name } : null,
     comparison: previous ? { previous: { ...previous }, ticks: sim.tick - previous.ticks, mood: mood - previous.mood } : null,
   };
 }

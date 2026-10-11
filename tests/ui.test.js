@@ -20,7 +20,7 @@ class Element {
   setPointerCapture() {}
 }
 
-test("timing UI shows mixed admission order, clear-line cue, and a working auto-call upgrade", async () => {
+test("UI covers zone timing, reviews, retry comparison, manual help and persisted delegation", async () => {
   const keys=["document","localStorage","requestAnimationFrame"];
   const originals=Object.fromEntries(keys.map(key=>[key,globalThis[key]]));
   const nodes = new Map();
@@ -78,9 +78,39 @@ test("timing UI shows mixed admission order, clear-line cue, and a working auto-
     for(let i=0;i<200&&!$("status").textContent.includes("Earned");i++)frame();
     assert.ok($("status").textContent.includes("Earned"));
     assert.ok($("lineHint").textContent.includes("0 overlapping calls"));
-    $("new").onclick(); frame(); calls()[0].onclick(); calls()[1].onclick();
+    $("new").onclick(); frame(); $("go").onclick();
     for(let i=0;i<200&&!$("status").textContent.includes("Earned");i++)frame();
     assert.equal($("reviewComparison").textContent, "");
+    // A fresh one-zone Tier 2 plan produces a real shuffle, with help before timeout.
+    $("plane").value="tier2"; $("plane").onchange(); $("speed").value="2"; frame();
+    $("go").onclick();
+    for(let i=0;i<1000&&$("assistPanel").hidden;i++)frame();
+    assert.equal($("assistPanel").hidden,false);
+    assert.ok($("assistHint").textContent.includes("hesitates at row"));
+    assert.equal($("assist").disabled,false);
+    $("assist").onclick();
+    assert.equal($("assistPanel").hidden,true);
+    for(let i=0;i<1000&&!$("status").textContent.includes("Earned");i++)frame();
+    assert.ok($("reviewAssist").textContent.includes("You helped"));
+    $("retry").onclick();
+    const helper = $("upgradeBox").children.find(e=>e.textContent.startsWith("Boarding helper:"));
+    assert.equal(helper.disabled,false);
+    const oldMoney = JSON.parse(stored).money;
+    helper.onclick();
+    assert.equal(JSON.parse(stored).shuffleStaff,true);
+    assert.equal(JSON.parse(stored).autoCall,true);
+    assert.equal(JSON.parse(stored).money,oldMoney-40);
+    frame(); $("go").onclick();
+    for(let i=0;i<1000&&!$("status").textContent.includes("Earned");i++) {
+      frame(); assert.equal($("assistPanel").hidden,true);
+    }
+    assert.ok($("reviewAssist").textContent.includes("Boarding helper helped"));
+    const moneyAfterFlight = JSON.parse(stored).money;
+    await import(`../src/main.js?reload-test=${Date.now()}`);
+    frame();
+    assert.equal($("money").textContent, `$${moneyAfterFlight}`);
+    assert.ok($("upgradeBox").children.some(e=>e.textContent === "✓ Boarding helper (owned)"));
+    assert.equal($("go").hidden, false);
   } finally {
     for(const [key,value] of Object.entries(originals)) {
       if(value===undefined)delete globalThis[key];else globalThis[key]=value;
