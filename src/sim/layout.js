@@ -14,6 +14,13 @@ export const PLANES = {
   wide9: { name: "Wide-body 3-3-3 · 288 seats", rows: 32, blocks: [3, 3, 3], maxZones: 5, target: 380 },
 };
 
+// Keep headless analysis and the playable flight on the same mood budget.
+// Custom dev layouts use a labelled placeholder fallback.
+export function defaultMoodTicks(layout) {
+  return Object.values(PLANES).find((p) => p.rows === layout.rows &&
+    p.blocks.length === layout.blocks.length && p.blocks.every((size, i) => size === layout.blocks[i]))?.target ?? 100;
+}
+
 export class PlaneLayout {
   // `blocks` may also be a number n, meaning [n, n].
   constructor(rows = 12, blocks = [1, 1]) {

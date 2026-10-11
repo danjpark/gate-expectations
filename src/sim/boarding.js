@@ -1,3 +1,4 @@
+import { defaultMoodTicks } from "./layout.js";
 import { generateManifest } from "./manifest.js";
 import { State, Phase } from "./passenger.js";
 
@@ -14,13 +15,16 @@ export const WALKWAY_CELLS = 4;    // placeholder: jet bridge length
 export const SEAT_TICKS = 2;       // placeholder: ticks to sit down
 export const UNSEAT_TICKS = 2;     // placeholder: ticks per neighbour to stand up and step out
 export const RESEAT_TICKS = 2;     // placeholder: ticks per neighbour to sit back down
+export const SHUFFLE_HESITATION_TICKS = 8; // placeholder: one optional assist per flight
 export const MELTDOWN_THRESHOLD = 20; // placeholders: one disruption per flight
 export const MELTDOWN_TICKS = 4;
 const HOLD = -2;                   // aisle cell taken by standing neighbours
 
 export class BoardingSim {
-  // moodTicks: the boarding time passengers treat as normal (affects only how fast mood sours).
-  constructor(layout, plan, seed, { moodTicks = 100 } = {}) {
+  // moodTicks: expected boarding time, scaling patience and review thresholds.
+  constructor(layout, plan, seed, { moodTicks = defaultMoodTicks(layout), autoAssist = false } = {}) {
+    this.autoAssist = autoAssist;
+    this.shuffleAssist = null;
     this.seed = seed;
     this.worstJam = null;
     this.meltdown = null;
@@ -169,7 +173,19 @@ export class BoardingSim {
         }
         p.phase = Phase.NEIGHBOURS_OUT;
         p.timer = UNSEAT_TICKS * p.neighbours.length;
+        // A real shuffle triggers one hesitant passenger, never a random popup.
+        if (!this.shuffleAssist) {
+          this.shuffleAssist = { passengerId: p.id, lane: a, row: p.row, tick: this.tick,
+            remaining: SHUFFLE_HESITATION_TICKS, outcome: "pending", savedTicks: 0 };
+          if (this.autoAssist) this.assistShuffle(p.id);
+        }
       } else if (p.phase === Phase.NEIGHBOURS_OUT) {
+        const assist = this.shuffleAssist;
+        if (assist?.passengerId === p.id && assist.outcome === "pending") {
+          this.block(p);
+          if (--assist.remaining === 0) assist.outcome = "ignored";
+          continue;
+        }
         if (--p.timer === 0) { p.phase = Phase.SIT; p.timer = SEAT_TICKS; }
       } else if (p.phase === Phase.SIT && --p.timer === 0) {
         lane[c] = -1;
@@ -182,6 +198,17 @@ export class BoardingSim {
         }
       }
     }
+  }
+
+  // Logical player command; only removes the remaining hesitation, not the physical shuffle.
+  // Duplicate, stale, wrong-passenger and during-meltdown commands are harmless.
+  assistShuffle(passengerId) {
+    const event = this.shuffleAssist;
+    if (!event || event.outcome !== "pending" || event.passengerId !== passengerId || this.meltdownRemaining > 0) return false;
+    event.savedTicks = event.remaining;
+    event.remaining = 0;
+    event.outcome = this.autoAssist ? "staff" : "manual";
+    return true;
   }
 
   stepWalkway() {

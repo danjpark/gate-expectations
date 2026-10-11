@@ -89,12 +89,16 @@
   </div>
 
   <div id="disruption" class="gate-line disruption" role="status" hidden></div>
+  <div id="assistPanel" class="gate-line" hidden>
+    <span id="assistHint" role="status"></span><button id="assist">Help with seat shuffle</button>
+  </div>
   <section id="review" class="panel review" hidden>
-    <h2>Flight review <small>time and mood scored separately</small></h2>
+    <h2>Flight review <small>time and mood shown separately</small></h2>
     <div id="reviewSummary"></div>
     <p id="reviewComparison" class="hint"></p>
     <p id="worstJam" class="hint"></p>
     <p id="reviewDisruption" class="hint"></p>
+    <p id="reviewAssist" class="hint"></p>
     <div class="review-columns">
       <div><h2>Complaints</h2><ul id="complaints"></ul></div>
       <div><h2>Compliments</h2><ul id="compliments"></ul></div>

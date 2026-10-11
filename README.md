@@ -35,6 +35,13 @@ Planes (`PLANES` in `src/sim/layout.js`): Tier 1 (24 seats, 2 zones), Tier 2 (48
 - Mood below 20 triggers at most one meltdown per flight: a visible ring/message and four fixed
   pause ticks. Experience counters freeze during the pause, so its penalty cannot cause a mood cascade.
   Thresholds, limits and penalties are placeholders. Failure and money remain time-only.
+- **Phase 3: one seat-shuffle assist.** The first actual shuffle in a flight produces an eight-tick
+  hesitation: highlighted passenger, row/aisle location and a Help button. Ignoring it resolves
+  automatically. Help removes only the remaining hesitation; normal standing/sitting still takes time.
+  There is at most one event per flight; Tier 1 has no intervening seats and therefore no such event.
+- A $40 boarding helper delegates that same intervention automatically, persisting between flights.
+  Existing saves default the new `shuffleStaff` flag to false without losing money or auto-call.
+  No hiring/experience system. Event timing and price are placeholders.
 - Hover name cards; one trait (patience) feeding mood.
 
 ## Run
@@ -53,7 +60,8 @@ distributions, with a seat map of each plan. Works for any plane given as rows x
 (e.g. `3-4-3`) and up to 5 zones. Zone patterns rank seats by a blend of row (back to front) and
 distance from the aisle (window first), then cut the ranking into zones (`src/sim/patterns.js`).
 The default analysis uses queue-empty auto-calling in numerical zone order (not a replay of manual
-calls). An explicit numeric `runBatch` gap still tests fixed call timing; `0` calls only the first zone.
+calls), without an owned boarding helper. Known plane layouts share the game's mood budget;
+custom layouts use a placeholder budget of 100 ticks. An explicit numeric `runBatch` gap still tests fixed call timing; `0` calls only the first zone.
 The search tunes the cuts for several blend angles; an optional pass then refines single seats.
 CLI version: `node tools/analyze.js 32 3-4-3 5` (rows, seat blocks, zones).
 
@@ -85,7 +93,7 @@ calls versus 78.64 with auto-call; auto-call was faster on all 50 seeds. For see
 were 109 ticks, auto-call 80, and waiting until tick 120 for the second zone 168. These results are
 specific to that plan and seed set, not a guarantee that every overlapping call hurts every plan.
 
-Existing browser saves keep the same shape in Phases 1–2. Progression, luggage, doors and engine work remain deferred.
+Existing browser saves keep the same shape in Phases 1–2; Phase 3 adds a backward-compatible staff flag. Progression, luggage, doors and engine work remain deferred.
 
 ## Phase 2 playtest
 
@@ -93,3 +101,14 @@ Finish a flight, check whether the comments and worst jam match what you watched
 compare time and mood. Delay a zone long enough to sour a passenger below 20: boarding pauses once
 for four ticks, with a highlighted passenger. No further meltdowns occur that flight. Reviews and
 disruption visibility await local visual playtesting. Phase 1 benchmarks above predate Phase 2.
+
+
+## Phase 3 playtest
+
+Use Tier 2 with one zone and seed 1 (New flight changes the seed). Watch for the first seated
+neighbour to step out: ignore the highlighted hesitation and review the result. Retry and press
+Help; compare time/mood. Retry, buy Boarding helper with $40, then board again to compare delegation.
+The review reports hesitation ticks removed, not a guaranteed equal improvement in total time:
+other aisles/rows can remain the bottleneck. A window-first plan can prevent shuffles entirely.
+At 2× the manual window lasts about two seconds; lower speed if needed. Visual verification awaits
+local playtesting. Stop here: no Phase 4 progression or Phase 5 systems are implemented.
